@@ -73,6 +73,9 @@ test("keeps the human publishing and Telegram workflows in the dashboard", async
   assert.match(css, /@keyframes conversation-swap/);
   assert.match(css, /@keyframes modal-card-in/);
   assert.match(css, /@media \(hover: hover\) and \(pointer: fine\)/);
+  assert.match(css, /\.panel:hover[\s\S]*translate3d\(0,-7px,0\)/);
+  assert.match(css, /surface-in 520ms var\(--ease-soft\) backwards/);
+  assert.match(css, /card-deal 500ms var\(--ease-soft\) backwards/);
   assert.match(css, /\.modal-backdrop/);
   assert.match(css, /\.action-menu/);
   assert.match(css, /prefers-reduced-motion: reduce/);
