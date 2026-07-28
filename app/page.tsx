@@ -53,6 +53,35 @@ const viewMeta: Record<View, { title: string; sub: string }> = {
   settings: { title: "تنظیمات", sub: "فاصله پایش، قوانین تأیید و محدودیت‌های هزینه را مدیریت کنید." },
 };
 
+const viewRoutes: Record<View, string> = {
+  overview: "/",
+  replies: "/replies",
+  content: "/content",
+  sent: "/history",
+  telegram: "/telegram",
+  research: "/research",
+  budget: "/budget",
+  settings: "/settings",
+};
+
+const routeViews: Record<string, View> = {
+  "/": "overview",
+  "/overview": "overview",
+  "/replies": "replies",
+  "/content": "content",
+  "/history": "sent",
+  "/sent": "sent",
+  "/telegram": "telegram",
+  "/research": "research",
+  "/budget": "budget",
+  "/settings": "settings",
+};
+
+function viewFromPathname(pathname: string): View {
+  const normalized = pathname === "/" ? pathname : pathname.replace(/\/+$/, "");
+  return routeViews[normalized] || "overview";
+}
+
 const replies = [
   {
     id: "r-2041",
@@ -151,8 +180,11 @@ function useStoredIds(key: string) {
   const [ids, setIds] = useState<string[]>([]);
   const [ready, setReady] = useState(false);
   useEffect(() => {
-    try { setIds(JSON.parse(window.localStorage.getItem(key) || "[]")); } catch { setIds([]); }
-    setReady(true);
+    const hydrationTimer = window.setTimeout(() => {
+      try { setIds(JSON.parse(window.localStorage.getItem(key) || "[]")); } catch { setIds([]); }
+      setReady(true);
+    }, 0);
+    return () => window.clearTimeout(hydrationTimer);
   }, [key]);
   useEffect(() => { if (ready) window.localStorage.setItem(key, JSON.stringify(ids)); }, [ids, key, ready]);
   const mark = (id: string) => setIds((current) => current.includes(id) ? current : [...current, id]);
@@ -397,7 +429,7 @@ function SentView({ replyIds, postIds }: { replyIds: string[]; postIds: string[]
     </div>
     <article className="panel history-panel">
       <div className="panel-head"><div><span className="eyebrow">گزارش عملیات</span><h3>ارسال‌های تأییدشده اپراتور</h3><p>در نسخه نهایی، زمان دقیق، کاربر انجام‌دهنده و لینک X در Audit Log ثبت می‌شود.</p></div></div>
-      {records.length === 0 ? <div className="empty-state"><strong>هنوز ارسالی ثبت نشده است.</strong><p>پس از انتشار در X، دکمه «من ارسال کردم» را در صف محتوا یا صندوق پاسخ‌ها بزنید.</p></div> : <div className="history-list">{records.map((record, index) => <div className="history-row" key={record.id}><span className={`history-icon ${record.type === "پست" ? "post" : "reply"}`}>{record.type === "پست" ? "≡" : "↩"}</span><div><strong>{record.title}</strong><p dir="auto">{record.detail}</p><small>{record.language} · میز اپراتور · همین حالا</small></div><span className="sent-chip">✓ ثبت‌شده</span><button className="btn quiet" onClick={() => window.open("https://x.com/", "_blank", "noopener,noreferrer")}>دیدن در X ↗</button></div>)}</div>}
+      {records.length === 0 ? <div className="empty-state"><strong>هنوز ارسالی ثبت نشده است.</strong><p>پس از انتشار در X، دکمه «من ارسال کردم» را در صف محتوا یا صندوق پاسخ‌ها بزنید.</p></div> : <div className="history-list">{records.map((record) => <div className="history-row" key={record.id}><span className={`history-icon ${record.type === "پست" ? "post" : "reply"}`}>{record.type === "پست" ? "≡" : "↩"}</span><div><strong>{record.title}</strong><p dir="auto">{record.detail}</p><small>{record.language} · میز اپراتور · همین حالا</small></div><span className="sent-chip">✓ ثبت‌شده</span><button className="btn quiet" onClick={() => window.open("https://x.com/", "_blank", "noopener,noreferrer")}>دیدن در X ↗</button></div>)}</div>}
     </article>
   </section>;
 }
@@ -434,7 +466,10 @@ function TelegramView({ onNavigate }: { onNavigate: (view: View) => void }) {
     }
   };
 
-  useEffect(() => { void refreshConnection(); }, []);
+  useEffect(() => {
+    const connectionTimer = window.setTimeout(() => void refreshConnection(), 0);
+    return () => window.clearTimeout(connectionTimer);
+  }, []);
 
   const testTelegram = async () => {
     if (!connection?.connected) {
@@ -524,17 +559,56 @@ export default function Home() {
   const sentPosts = useStoredIds("wallet-social-sent-posts");
 
   useEffect(() => {
+    const initialView = viewFromPathname(window.location.pathname);
+    const canonicalPath = viewRoutes[initialView];
+    const routeInitTimer = window.setTimeout(() => {
+      setView(initialView);
+      setTargetView(initialView);
+    }, 0);
+    if (window.location.pathname !== canonicalPath) {
+      window.history.replaceState({ view: initialView }, "", canonicalPath);
+    } else {
+      window.history.replaceState({ view: initialView }, "", window.location.href);
+    }
+
+    const handlePopState = () => {
+      const next = viewFromPathname(window.location.pathname);
+      transitionTimers.current.forEach((item) => window.clearTimeout(item));
+      setMobileNav(false);
+      setTargetView(next);
+      setTransitionPhase("leaving");
+      transitionTimers.current = [
+        window.setTimeout(() => {
+          setView(next);
+          setTransitionPhase("loading");
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }, 170),
+        window.setTimeout(() => setTransitionPhase("idle"), 620),
+      ];
+    };
+
     const timer = window.setInterval(() => setSeconds((value) => value <= 0 ? 119 : value - 1), 1000);
     const loadingTimer = window.setTimeout(() => setIsLoading(false), 950);
+    window.addEventListener("popstate", handlePopState);
     return () => {
+      window.removeEventListener("popstate", handlePopState);
+      window.clearTimeout(routeInitTimer);
       window.clearInterval(timer);
       window.clearTimeout(loadingTimer);
       transitionTimers.current.forEach((item) => window.clearTimeout(item));
     };
   }, []);
 
+  useEffect(() => {
+    document.title = `${viewMeta[view].title} | والت سوشال`;
+  }, [view]);
+
   const changeView = (next: View) => {
     setMobileNav(false);
+    const nextPath = viewRoutes[next];
+    if (window.location.pathname !== nextPath) {
+      window.history.pushState({ view: next }, "", nextPath);
+    }
     if (next === targetView && transitionPhase === "idle") return;
     transitionTimers.current.forEach((item) => window.clearTimeout(item));
     setTargetView(next);
