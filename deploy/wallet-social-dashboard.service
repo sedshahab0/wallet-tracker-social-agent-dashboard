@@ -1,0 +1,26 @@
+[Unit]
+Description=Wallet Tracker Social Agent Dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/srv/wallet-social-dashboard/current
+Environment=NODE_ENV=production
+Environment=PORT=3002
+EnvironmentFile=/etc/wallet-social-dashboard.env
+ExecStart=/usr/local/bin/npm run start -- --hostname 127.0.0.1 --port 3002
+Restart=always
+RestartSec=4
+TimeoutStopSec=20
+KillSignal=SIGTERM
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/srv/wallet-social-dashboard/current/.wrangler
+
+[Install]
+WantedBy=multi-user.target
