@@ -14,31 +14,32 @@ async function render(pathname = "/") {
   );
 }
 
-test("server-renders the Persian dashboard and loading skeleton", async () => {
-  const response = await render();
+test("server-renders the secure Persian login", async () => {
+  const response = await render("/login");
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
   assert.match(html, /<html lang="fa" dir="rtl">/i);
-  assert.match(html, /<title>والت سوشال · مرکز مدیریت شبکه اجتماعی<\/title>/i);
-  assert.match(html, /والت سوشال/);
-  assert.match(html, /aria-label="در حال بارگذاری"/);
-  assert.match(html, /mobile-bottom-nav/);
+  assert.match(html, /<title>ورود امن \| Wallet Tracker<\/title>/i);
+  assert.match(html, /خوش آمدید/);
+  assert.match(html, /ورود به داشبورد/);
+  assert.match(html, /wallet-tracker-x-avatar-400/);
 });
 
-test("serves dashboard sections as direct routes", async () => {
-  const response = await render("/content");
-  assert.equal(response.status, 200);
+test("protects dashboard routes and preserves the requested destination", async () => {
+  const rootResponse = await render();
+  assert.equal(rootResponse.status, 307);
+  assert.match(rootResponse.headers.get("location") ?? "", /\/login$/);
 
-  const html = await response.text();
-  assert.match(html, /والت سوشال/);
-  assert.match(html, /aria-label="در حال بارگذاری"/);
+  const contentResponse = await render("/content");
+  assert.equal(contentResponse.status, 307);
+  assert.match(contentResponse.headers.get("location") ?? "", /\/login\?next=%2Fcontent$/);
 });
 
 test("keeps the human publishing and Telegram workflows in the dashboard", async () => {
   const [page, css, layout] = await Promise.all([
-    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard-client.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
   ]);
@@ -70,4 +71,21 @@ test("keeps Telegram credentials server-side", async () => {
   assert.match(route, /process\.env\.TELEGRAM_BOT_TOKEN/);
   assert.match(route, /sendMessage/);
   assert.doesNotMatch(route, /8856131466:/);
+});
+
+test("keeps dashboard credentials server-side and signs the session", async () => {
+  const [auth, loginRoute, exampleEnv] = await Promise.all([
+    readFile(new URL("../lib/auth.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/auth/login/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../.env.example", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(auth, /DASHBOARD_SESSION_SECRET/);
+  assert.match(auth, /HMAC/);
+  assert.match(auth, /safeDashboardPath/);
+  assert.match(loginRoute, /httpOnly: true/);
+  assert.match(loginRoute, /sameSite: "lax"/);
+  assert.match(loginRoute, /MAX_ATTEMPTS = 5/);
+  assert.match(exampleEnv, /DASHBOARD_PASSWORD=\n/);
+  assert.doesNotMatch(`${auth}\n${loginRoute}\n${exampleEnv}`, /\+8DOYWNKDs159A5uzzsSYxu1/);
 });
