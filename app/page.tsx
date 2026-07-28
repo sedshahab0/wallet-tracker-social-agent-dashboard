@@ -561,7 +561,7 @@ export default function Home() {
   return (
     <div className="app-shell">
       <aside className={`sidebar ${mobileNav ? "open" : ""}`}>
-        <div className="brand"><div className="brand-mark" aria-hidden="true"><span/><span/><span/><span/></div><div><strong>والت سوشال</strong><small>مرکز مدیریت شبکه اجتماعی</small></div></div>
+        <div className="brand"><div className="brand-mark" aria-hidden="true"><strong>WT</strong></div><div><strong>والت سوشال</strong><small>مرکز مدیریت شبکه اجتماعی</small></div></div>
         <nav className="navigation">
           {navGroups.map((group) => <div className="nav-group" key={group.label}><div className="nav-label">{group.label}</div>{group.items.map((item) => <button key={item.id} className={`nav-link ${targetView === item.id ? "active" : ""} ${transitionPhase !== "idle" && targetView === item.id ? "pending" : ""}`} onClick={() => changeView(item.id)}><span className="nav-icon">{item.icon}</span><span>{item.label}</span>{item.badge && <b>{item.badge}</b>}</button>)}</div>)}
         </nav>
