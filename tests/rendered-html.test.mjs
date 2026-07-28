@@ -56,6 +56,14 @@ test("keeps the human publishing and Telegram workflows in the dashboard", async
   assert.match(page, /https:\/\/x\.com\/WalletTrackerHQ/);
   assert.match(page, /wallet-social-sent-posts/);
   assert.match(page, /wallet-social-sent-replies/);
+  assert.match(page, /wallet-social-content-items/);
+  assert.match(page, /wallet-social-reply-items/);
+  assert.match(page, /wallet-social-settings/);
+  assert.match(page, /reply-editor-form/);
+  assert.match(page, /content-editor-form/);
+  assert.match(page, /research-request-form/);
+  assert.match(page, /aria-modal="true"/);
+  assert.match(page, /event\.key === "Escape"/);
   assert.match(page, /transitionPhase/);
   assert.match(page, /content-stage/);
   assert.match(css, /@media \(max-width: 560px\)/);
@@ -63,6 +71,10 @@ test("keeps the human publishing and Telegram workflows in the dashboard", async
   assert.match(css, /@keyframes view-reveal/);
   assert.match(css, /@keyframes skeleton-enter/);
   assert.match(css, /@keyframes conversation-swap/);
+  assert.match(css, /@keyframes modal-card-in/);
+  assert.match(css, /@media \(hover: hover\) and \(pointer: fine\)/);
+  assert.match(css, /\.modal-backdrop/);
+  assert.match(css, /\.action-menu/);
   assert.match(css, /prefers-reduced-motion: reduce/);
   assert.match(css, /overflow-x: hidden/);
   assert.match(layout, /lang="fa" dir="rtl"/);

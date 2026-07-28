@@ -1,9 +1,36 @@
 "use client";
 
+import type { FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 type View = "overview" | "replies" | "content" | "sent" | "telegram" | "research" | "budget" | "settings";
 type Risk = "green" | "yellow" | "red";
+type ReplyItem = {
+  id: string;
+  handle: string;
+  avatar: string;
+  language: string;
+  age: string;
+  sentiment: string;
+  risk: Risk;
+  confidence: number;
+  original: string;
+  translation: string;
+  answer: string;
+  answerTranslation: string;
+};
+type ContentItem = {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  language: string;
+  risk: Risk;
+  time: string;
+  source: string;
+  postText: string;
+};
 type TelegramConnection = {
   configured: boolean;
   connected: boolean;
@@ -14,6 +41,7 @@ type TelegramConnection = {
 
 const X_ACCOUNT_HANDLE = "@WalletTrackerHQ";
 const X_ACCOUNT_URL = "https://x.com/WalletTrackerHQ";
+const SETTINGS_DEFAULTS = { polling: true, firecrawl: true, interval: "120", budget: "10.00", lowConfidence: true, externalClaims: true, importantAccounts: true };
 
 const navGroups = [
   {
@@ -82,7 +110,7 @@ function viewFromPathname(pathname: string): View {
   return routeViews[normalized] || "overview";
 }
 
-const replies = [
+const replies: ReplyItem[] = [
   {
     id: "r-2041",
     handle: "@carlos_chain",
@@ -133,7 +161,7 @@ const replies = [
   },
 ];
 
-const contentItems = [
+const contentItems: ContentItem[] = [
   {
     id: "p-301",
     type: "به‌روزرسانی محصول",
@@ -189,6 +217,61 @@ function useStoredIds(key: string) {
   useEffect(() => { if (ready) window.localStorage.setItem(key, JSON.stringify(ids)); }, [ids, key, ready]);
   const mark = (id: string) => setIds((current) => current.includes(id) ? current : [...current, id]);
   return { ids, mark };
+}
+
+function useStoredCollection<T>(key: string, initialItems: T[]) {
+  const [items, setItems] = useState<T[]>(initialItems);
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const hydrationTimer = window.setTimeout(() => {
+      try {
+        const stored = JSON.parse(window.localStorage.getItem(key) || "null");
+        if (Array.isArray(stored) && stored.length) setItems(stored as T[]);
+      } catch {
+        setItems(initialItems);
+      }
+      setReady(true);
+    }, 0);
+    return () => window.clearTimeout(hydrationTimer);
+  }, [key, initialItems]);
+  useEffect(() => {
+    if (ready) window.localStorage.setItem(key, JSON.stringify(items));
+  }, [items, key, ready]);
+  return { items, setItems };
+}
+
+function ModalShell({ title, eyebrow, children, footer, onClose }: { title: string; eyebrow: string; children: ReactNode; footer: ReactNode; onClose: () => void }) {
+  const closeButton = useRef<HTMLButtonElement>(null);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onCloseRef.current();
+    };
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", handleKey);
+    closeButton.current?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, []);
+  return createPortal(
+    <div className="modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) onClose(); }}>
+      <section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="dashboard-modal-title">
+        <header className="modal-head">
+          <div><span className="eyebrow">{eyebrow}</span><h2 id="dashboard-modal-title">{title}</h2></div>
+          <button ref={closeButton} className="modal-close" type="button" onClick={onClose} aria-label="بستن پنجره">×</button>
+        </header>
+        <div className="modal-body">{children}</div>
+        <footer className="modal-footer">{footer}</footer>
+      </section>
+    </div>,
+    document.body,
+  );
 }
 
 function RiskBadge({ risk }: { risk: Risk }) {
@@ -311,10 +394,25 @@ function Overview({ onNavigate }: { onNavigate: (view: View) => void }) {
   );
 }
 
-function RepliesView({ sentIds, onMarkSent }: { sentIds: string[]; onMarkSent: (id: string) => void }) {
-  const [selected, setSelected] = useState(0);
+function RepliesView({ replyItems, onRepliesChange, sentIds, onMarkSent }: { replyItems: ReplyItem[]; onRepliesChange: (items: ReplyItem[]) => void; sentIds: string[]; onMarkSent: (id: string) => void }) {
+  const [selectedId, setSelectedId] = useState(replyItems[0]?.id || "");
+  const [search, setSearch] = useState("");
+  const [language, setLanguage] = useState("all");
   const [toast, setToast] = useState("");
-  const reply = replies[selected];
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [editAnswer, setEditAnswer] = useState("");
+  const [editTranslation, setEditTranslation] = useState("");
+  const escalated = useStoredIds("wallet-social-escalated-replies");
+  const languages = useMemo(() => Array.from(new Set(replyItems.map((item) => item.language))), [replyItems]);
+  const visibleReplies = useMemo(() => replyItems.filter((item) => {
+    const matchesLanguage = language === "all" || item.language === language;
+    const query = search.trim().toLocaleLowerCase();
+    const matchesSearch = !query || `${item.handle} ${item.original} ${item.translation}`.toLocaleLowerCase().includes(query);
+    return matchesLanguage && matchesSearch;
+  }), [language, replyItems, search]);
+  const reply = visibleReplies.find((item) => item.id === selectedId) || visibleReplies[0] || replyItems.find((item) => item.id === selectedId) || replyItems[0];
+  if (!reply) return <div className="panel empty-state"><strong>پاسخی در صف نیست.</strong><p>پس از دریافت نخستین پاسخ، جزئیات آن در این بخش نمایش داده می‌شود.</p></div>;
   const isSent = sentIds.includes(reply.id);
 
   const notify = (message: string) => {
@@ -327,19 +425,39 @@ function RepliesView({ sentIds, onMarkSent }: { sentIds: string[]; onMarkSent: (
     notify("پاسخ کپی شد؛ حالا آن را در X ارسال کنید");
   };
 
+  const openEditor = () => {
+    setEditAnswer(reply.answer);
+    setEditTranslation(reply.answerTranslation);
+    setEditorOpen(true);
+  };
+
+  const saveReply = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!editAnswer.trim()) return;
+    onRepliesChange(replyItems.map((item) => item.id === reply.id ? { ...item, answer: editAnswer.trim(), answerTranslation: editTranslation.trim() } : item));
+    setEditorOpen(false);
+    notify("نسخه ویرایش‌شده پاسخ ذخیره شد");
+  };
+
+  const escalateReply = () => {
+    escalated.mark(reply.id);
+    notify("پاسخ برای بررسی مدیر علامت‌گذاری شد");
+  };
+
   return (
     <section className="inbox-layout">
       <article className="panel inbox-list-panel">
-        <div className="panel-head inbox-head"><div><span className="eyebrow">۱۲ مورد منتظر</span><h3>پاسخ‌های دریافتی</h3></div><button className="filter-btn">همه زبان‌ها⌄</button></div>
-        <label className="search-box"><span>⌕</span><input placeholder="جست‌وجوی پاسخ یا نام کاربر…" /></label>
+        <div className="panel-head inbox-head"><div><span className="eyebrow">{visibleReplies.length} مورد در این نما</span><h3>پاسخ‌های دریافتی</h3></div><select className="filter-btn" value={language} onChange={(event) => setLanguage(event.target.value)} aria-label="فیلتر زبان"><option value="all">همه زبان‌ها</option>{languages.map((item) => <option value={item} key={item}>{item}</option>)}</select></div>
+        <label className="search-box"><span>⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="جست‌وجوی پاسخ یا نام کاربر…" /></label>
         <div className="inbox-list">
-          {replies.map((item, index) => (
-            <button key={item.id} className={`inbox-item ${selected === index ? "active" : ""} ${sentIds.includes(item.id) ? "handled" : ""}`} onClick={() => setSelected(index)}>
+          {visibleReplies.map((item) => (
+            <button key={item.id} className={`inbox-item ${reply.id === item.id ? "active" : ""} ${sentIds.includes(item.id) ? "handled" : ""}`} onClick={() => { setSelectedId(item.id); setMoreOpen(false); }}>
               <span className="avatar">{item.avatar}</span>
               <span><strong>{item.handle}</strong><small>{item.original}</small><em>{item.language} · {item.age}</em></span>
-              {sentIds.includes(item.id) ? <span className="sent-chip">ارسال‌شده</span> : <RiskBadge risk={item.risk} />}
+              {sentIds.includes(item.id) ? <span className="sent-chip">ارسال‌شده</span> : <RiskBadge risk={escalated.ids.includes(item.id) ? "red" : item.risk} />}
             </button>
           ))}
+          {visibleReplies.length === 0 && <div className="empty-state compact"><strong>پاسخی پیدا نشد.</strong><p>عبارت جست‌وجو یا فیلتر زبان را تغییر دهید.</p></div>}
         </div>
       </article>
 
@@ -347,7 +465,7 @@ function RepliesView({ sentIds, onMarkSent }: { sentIds: string[]; onMarkSent: (
         <div className="conversation-motion" key={reply.id}>
         <div className="conversation-head">
               <div className="identity"><span className="avatar large">{reply.avatar}</span><div><strong>{reply.handle}</strong><small>{reply.language} · {reply.sentiment} · {reply.age} قبل</small></div></div>
-          <div><RiskBadge risk={reply.risk} /><button className="icon-button" aria-label="اقدام‌های بیشتر">•••</button></div>
+          <div><RiskBadge risk={escalated.ids.includes(reply.id) ? "red" : reply.risk} /><div className="action-menu-wrap"><button className={`icon-button ${moreOpen ? "active" : ""}`} onClick={() => setMoreOpen((value) => !value)} aria-label="اقدام‌های بیشتر" aria-expanded={moreOpen}>•••</button>{moreOpen && <div className="action-menu"><button onClick={async () => { await navigator.clipboard?.writeText(reply.original); setMoreOpen(false); notify("متن اصلی کاربر کپی شد"); }}>کپی متن کاربر</button><button onClick={() => { setMoreOpen(false); window.open(`https://x.com/${reply.handle.replace("@", "")}`, "_blank", "noopener,noreferrer"); }}>مشاهده پروفایل در X ↗</button></div>}</div></div>
         </div>
         <div className="original-post">
           <span className="context-label">پاسخ دریافت‌شده</span>
@@ -361,8 +479,8 @@ function RepliesView({ sentIds, onMarkSent }: { sentIds: string[]; onMarkSent: (
           <div className="source-strip"><span>منابع</span><b>پایگاه دانش محصول</b><b>قوانین پشتیبانی نسخه ۱٫۳</b></div>
           <div className="operator-steps" aria-label="مراحل اپراتور"><span><b>۱</b> پاسخ را کپی کن</span><span><b>۲</b> گفتگو را در X باز کن</span><span><b>۳</b> ارسال را ثبت کن</span></div>
           <div className="answer-actions">
-            <button className="btn quiet">ویرایش پاسخ</button>
-            <button className="btn quiet">ارجاع به مدیر</button>
+            <button className="btn quiet" onClick={openEditor}>ویرایش پاسخ</button>
+            <button className={`btn quiet ${escalated.ids.includes(reply.id) ? "done" : ""}`} disabled={escalated.ids.includes(reply.id)} onClick={escalateReply}>{escalated.ids.includes(reply.id) ? "✓ ارجاع شد" : "ارجاع به مدیر"}</button>
             <button className="btn accent" onClick={copyAnswer}>کپی پاسخ</button>
             <button className="btn primary" onClick={() => window.open("https://x.com/", "_blank", "noopener,noreferrer")}>بازکردن گفتگو در X ↗</button>
             <button className={`btn sent-action ${isSent ? "done" : ""}`} disabled={isSent} onClick={() => { onMarkSent(reply.id); notify("پاسخ به‌عنوان ارسال‌شده ثبت شد"); }}>{isSent ? "✓ پاسخ ارسال شده است" : "من این پاسخ را ارسال کردم"}</button>
@@ -371,18 +489,37 @@ function RepliesView({ sentIds, onMarkSent }: { sentIds: string[]; onMarkSent: (
         </div>
       </article>
       {toast && <div className="toast">✓ {toast}</div>}
+      {editorOpen && <ModalShell title={`ویرایش پاسخ به ${reply.handle}`} eyebrow={`پاسخ ${reply.language}`} onClose={() => setEditorOpen(false)} footer={<><button className="btn quiet" type="button" onClick={() => setEditorOpen(false)}>انصراف</button><button className="btn accent" type="submit" form="reply-editor-form" disabled={!editAnswer.trim()}>ذخیره پاسخ</button></>}><form id="reply-editor-form" className="modal-form" onSubmit={saveReply}><div className="modal-context"><span>پیام اصلی کاربر</span><p dir="auto">{reply.original}</p></div><label>پاسخ پیشنهادی به زبان کاربر<textarea value={editAnswer} onChange={(event) => setEditAnswer(event.target.value)} dir="auto" rows={5} autoFocus /></label><label>ترجمه فارسی برای اپراتور<textarea value={editTranslation} onChange={(event) => setEditTranslation(event.target.value)} dir="rtl" rows={4} /></label><div className="modal-hint"><i /> تغییرات فقط در داشبورد ذخیره می‌شود و هیچ پاسخی خودکار در X منتشر نخواهد شد.</div></form></ModalShell>}
     </section>
   );
 }
 
-function ContentView({ sentIds, onMarkSent }: { sentIds: string[]; onMarkSent: (id: string) => void }) {
+function ContentView({ content, onContentChange, sentIds, onMarkSent }: { content: ContentItem[]; onContentChange: (items: ContentItem[]) => void; sentIds: string[]; onMarkSent: (id: string) => void }) {
   const [filter, setFilter] = useState<"all" | Risk>("all");
   const [status, setStatus] = useState<"all" | "ready" | "sent">("all");
   const [toast, setToast] = useState("");
-  const items = useMemo(() => contentItems.filter((item) => filter === "all" || item.risk === filter), [filter]);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [draft, setDraft] = useState<ContentItem>({ id: "", type: "به‌روزرسانی محصول", title: "", body: "", language: "انگلیسی", risk: "green", time: "زمان‌بندی نشده", source: "", postText: "" });
+  const items = useMemo(() => content.filter((item) => filter === "all" || item.risk === filter), [content, filter]);
   const visibleItems = items.filter((item) => status === "all" || (status === "sent") === sentIds.includes(item.id));
   const notify = (message: string) => { setToast(message); window.setTimeout(() => setToast(""), 2200); };
   const copyPost = async (text: string) => { await navigator.clipboard?.writeText(text); notify("متن پست کپی شد؛ آن را در X منتشر کنید"); };
+  const openEditor = (item?: ContentItem) => {
+    setDraft(item ? { ...item } : { id: "", type: "به‌روزرسانی محصول", title: "", body: "", language: "انگلیسی", risk: "green", time: "زمان‌بندی نشده", source: "", postText: "" });
+    setEditorOpen(true);
+  };
+  const saveContent = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!draft.title.trim() || !draft.postText.trim() || draft.postText.length > 280) return;
+    if (draft.id) {
+      onContentChange(content.map((item) => item.id === draft.id ? { ...draft, title: draft.title.trim(), postText: draft.postText.trim() } : item));
+      notify("تغییرات پیش‌نویس ذخیره شد");
+    } else {
+      onContentChange([{ ...draft, id: `p-${Date.now()}`, title: draft.title.trim(), postText: draft.postText.trim() }, ...content]);
+      notify("پیش‌نویس جدید به صف محتوا اضافه شد");
+    }
+    setEditorOpen(false);
+  };
   return (
     <section>
       <div className="section-toolbar">
@@ -394,7 +531,7 @@ function ContentView({ sentIds, onMarkSent }: { sentIds: string[]; onMarkSent: (
             {(["all", "ready", "sent"] as const).map((item) => <button key={item} className={status === item ? "active" : ""} onClick={() => setStatus(item)}>{item === "all" ? "همه وضعیت‌ها" : item === "ready" ? "آماده انتشار" : "ارسال‌شده"}</button>)}
           </div>
         </div>
-        <button className="btn accent">＋ پیش‌نویس جدید</button>
+        <button className="btn accent" onClick={() => openEditor()}>＋ پیش‌نویس جدید</button>
       </div>
       <div className="content-grid" key={`${filter}-${status}`}>
         {visibleItems.map((item) => {
@@ -406,20 +543,21 @@ function ContentView({ sentIds, onMarkSent }: { sentIds: string[]; onMarkSent: (
             <div className="source-box"><span>منبع</span><strong>{item.source}</strong></div>
             <div className="publish-copy" dir="auto"><span>متن نهایی برای X</span><p>{item.postText}</p></div>
             <div className="operator-steps compact"><span><b>۱</b> کپی</span><span><b>۲</b> انتشار در X</span><span><b>۳</b> ثبت در داشبورد</span></div>
-            <div className="card-actions"><button className="btn quiet">ویرایش</button><button className="btn accent" onClick={() => copyPost(item.postText)}>کپی متن</button><button className="btn primary" onClick={() => window.open("https://x.com/compose/post", "_blank", "noopener,noreferrer")}>بازکردن X ↗</button><button className={`btn sent-action ${isSent ? "done" : ""}`} disabled={isSent} onClick={() => { onMarkSent(item.id); notify("پست به‌عنوان منتشرشده ثبت شد"); }}>{isSent ? "✓ انتشار ثبت شد" : "من این پست را منتشر کردم"}</button></div>
+            <div className="card-actions"><button className="btn quiet" onClick={() => openEditor(item)}>ویرایش</button><button className="btn accent" onClick={() => copyPost(item.postText)}>کپی متن</button><button className="btn primary" onClick={() => window.open("https://x.com/compose/post", "_blank", "noopener,noreferrer")}>بازکردن X ↗</button><button className={`btn sent-action ${isSent ? "done" : ""}`} disabled={isSent} onClick={() => { onMarkSent(item.id); notify("پست به‌عنوان منتشرشده ثبت شد"); }}>{isSent ? "✓ انتشار ثبت شد" : "من این پست را منتشر کردم"}</button></div>
           </article>;
         })}
       </div>
       {visibleItems.length === 0 && <div className="panel empty-state"><strong>موردی با این فیلتر پیدا نشد.</strong><p>فیلتر وضعیت یا ریسک را تغییر دهید.</p></div>}
       {toast && <div className="toast">✓ {toast}</div>}
+      {editorOpen && <ModalShell title={draft.id ? "ویرایش پیش‌نویس" : "ساخت پیش‌نویس جدید"} eyebrow="صف محتوا" onClose={() => setEditorOpen(false)} footer={<><button className="btn quiet" type="button" onClick={() => setEditorOpen(false)}>انصراف</button><button className="btn accent" type="submit" form="content-editor-form" disabled={!draft.title.trim() || !draft.postText.trim() || draft.postText.length > 280}>{draft.id ? "ذخیره تغییرات" : "افزودن به صف"}</button></>}><form id="content-editor-form" className="modal-form" onSubmit={saveContent}><div className="form-grid"><label>نوع محتوا<input value={draft.type} onChange={(event) => setDraft({ ...draft, type: event.target.value })} /></label><label>زبان<select value={draft.language} onChange={(event) => setDraft({ ...draft, language: event.target.value })}><option>انگلیسی</option><option>فارسی</option><option>اسپانیایی</option><option>عربی</option></select></label><label className="full-row">عنوان داخلی<input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} autoFocus /></label><label className="full-row">خلاصه برای اپراتور<textarea value={draft.body} onChange={(event) => setDraft({ ...draft, body: event.target.value })} rows={3} /></label><label>زمان انتشار<input value={draft.time} onChange={(event) => setDraft({ ...draft, time: event.target.value })} /></label><label>سطح ریسک<select value={draft.risk} onChange={(event) => setDraft({ ...draft, risk: event.target.value as Risk })}><option value="green">کم‌ریسک</option><option value="yellow">نیازمند بررسی</option><option value="red">ارجاع فوری</option></select></label><label className="full-row">منبع<input value={draft.source} onChange={(event) => setDraft({ ...draft, source: event.target.value })} /></label><label className="full-row">متن نهایی برای X<textarea value={draft.postText} onChange={(event) => setDraft({ ...draft, postText: event.target.value })} dir="auto" rows={6} /></label></div><div className={`character-count ${draft.postText.length > 280 ? "over" : ""}`}><span>{draft.postText.length.toLocaleString("fa-IR")} / ۲۸۰ نویسه</span><small>{draft.postText.length > 280 ? "متن باید کوتاه‌تر شود." : "قبل از انتشار، متن توسط اپراتور بررسی می‌شود."}</small></div></form></ModalShell>}
     </section>
   );
 }
 
-function SentView({ replyIds, postIds }: { replyIds: string[]; postIds: string[] }) {
+function SentView({ replyIds, postIds, replyItems, content }: { replyIds: string[]; postIds: string[]; replyItems: ReplyItem[]; content: ContentItem[] }) {
   const records = [
-    ...contentItems.filter((item) => postIds.includes(item.id)).map((item) => ({ id: item.id, type: "پست", title: item.title, detail: item.postText, language: item.language })),
-    ...replies.filter((item) => replyIds.includes(item.id)).map((item) => ({ id: item.id, type: "پاسخ", title: `پاسخ به ${item.handle}`, detail: item.answer, language: item.language })),
+    ...content.filter((item) => postIds.includes(item.id)).map((item) => ({ id: item.id, type: "پست", title: item.title, detail: item.postText, language: item.language })),
+    ...replyItems.filter((item) => replyIds.includes(item.id)).map((item) => ({ id: item.id, type: "پاسخ", title: `پاسخ به ${item.handle}`, detail: item.answer, language: item.language })),
   ];
   return <section>
     <div className="history-summary">
@@ -519,10 +657,36 @@ function TelegramView({ onNavigate }: { onNavigate: (view: View) => void }) {
 }
 
 function ResearchView() {
+  const researchItems = [
+    { score: 92, title: "پرسش‌های امنیت کیف‌پول در حال افزایش است", meta: "۱۸ پست X · ۷ منبع · انگلیسی و اسپانیایی", tag: "فرصت محتوایی", evidence: ["۷ منبع عمومی مستقل بررسی شده‌اند.", "پرسش‌های پرتکرار درباره کلید خصوصی و عبارت بازیابی بوده‌اند.", "پیشنهاد: یک رشته‌پست آموزشی بدون توصیه مالی آماده شود."] },
+    { score: 86, title: "اعتمادپذیری اعلان‌های سولانا یک دغدغه پرتکرار است", meta: "۱۱ گفتگو · ۵ منبع · ۱۲ ساعت", tag: "آموزش محصول", evidence: ["۱۱ گفتگو در بازه ۱۲ ساعته دسته‌بندی شده‌اند.", "بیشترین ابهام مربوط به زمان دریافت اعلان است.", "پیشنهاد: تفاوت تأیید شبکه و اعلان اپلیکیشن توضیح داده شود."] },
+    { score: 74, title: "یکی از رقبا پشتیبانی از Base را اضافه کرد", meta: "نسخه تأیید شد · ۳ منشن پشتیبان", tag: "سیگنال رقابتی", evidence: ["صفحه رسمی محصول و یادداشت نسخه با یکدیگر تطبیق داده شدند.", "سه گفتگوی عمومی قابلیت جدید را تأیید می‌کنند.", "این سیگنال پیش از ورود به صف محتوا به بررسی محصول نیاز دارد."] },
+  ];
+  const [researchOpen, setResearchOpen] = useState(false);
+  const [selectedEvidence, setSelectedEvidence] = useState<(typeof researchItems)[number] | null>(null);
+  const [topic, setTopic] = useState("");
+  const [sourceScope, setSourceScope] = useState("منابع رسمی و گفتگوهای عمومی X");
+  const [running, setRunning] = useState(false);
+  const [toast, setToast] = useState("");
+  const runResearch = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!topic.trim()) return;
+    setRunning(true);
+    window.setTimeout(() => {
+      setRunning(false);
+      setResearchOpen(false);
+      setTopic("");
+      setToast("پژوهش هدفمند در صف بررسی قرار گرفت");
+      window.setTimeout(() => setToast(""), 2400);
+    }, 650);
+  };
   return (
     <section className="research-grid">
-      <article className="panel research-hero"><span className="eyebrow">بررسی انتخابی</span><h2>Firecrawl فقط وقتی اجرا می‌شود که کانتکست ارزش هزینه را داشته باشد.</h2><p>هر سیگنال از نظر ارتباط، تازگی و اعتبار منبع امتیاز می‌گیرد و سپس وارد صف محتوا می‌شود.</p><button className="btn accent">اجرای پژوهش هدفمند</button></article>
-      {[{score:92,title:"پرسش‌های امنیت کیف‌پول در حال افزایش است",meta:"۱۸ پست X · ۷ منبع · انگلیسی و اسپانیایی",tag:"فرصت محتوایی"},{score:86,title:"اعتمادپذیری اعلان‌های سولانا یک دغدغه پرتکرار است",meta:"۱۱ گفتگو · ۵ منبع · ۱۲ ساعت",tag:"آموزش محصول"},{score:74,title:"یکی از رقبا پشتیبانی از Base را اضافه کرد",meta:"نسخه تأیید شد · ۳ منشن پشتیبان",tag:"سیگنال رقابتی"}].map((item) => <article className="panel research-card" key={item.title}><div className="score">{item.score}</div><div><span>{item.tag}</span><h3>{item.title}</h3><p>{item.meta}</p></div><button className="text-btn">بررسی شواهد ←</button></article>)}
+      <article className="panel research-hero"><span className="eyebrow">بررسی انتخابی</span><h2>Firecrawl فقط وقتی اجرا می‌شود که کانتکست ارزش هزینه را داشته باشد.</h2><p>هر سیگنال از نظر ارتباط، تازگی و اعتبار منبع امتیاز می‌گیرد و سپس وارد صف محتوا می‌شود.</p><button className="btn accent" onClick={() => setResearchOpen(true)}>اجرای پژوهش هدفمند</button></article>
+      {researchItems.map((item) => <article className="panel research-card" key={item.title}><div className="score">{item.score}</div><div><span>{item.tag}</span><h3>{item.title}</h3><p>{item.meta}</p></div><button className="text-btn" onClick={() => setSelectedEvidence(item)}>بررسی شواهد ←</button></article>)}
+      {toast && <div className="toast">✓ {toast}</div>}
+      {researchOpen && <ModalShell title="پژوهش هدفمند جدید" eyebrow="Firecrawl انتخابی" onClose={() => setResearchOpen(false)} footer={<><button className="btn quiet" type="button" onClick={() => setResearchOpen(false)}>انصراف</button><button className="btn accent" type="submit" form="research-request-form" disabled={!topic.trim() || running}>{running ? "در حال ثبت…" : "ثبت پژوهش"}</button></>}><form id="research-request-form" className="modal-form" onSubmit={runResearch}><label>موضوع یا پرسش پژوهش<textarea rows={4} value={topic} onChange={(event) => setTopic(event.target.value)} placeholder="مثلاً دغدغه‌های کاربران درباره امنیت کیف‌پول چیست؟" autoFocus /></label><label>دامنه منابع<select value={sourceScope} onChange={(event) => setSourceScope(event.target.value)}><option>منابع رسمی و گفتگوهای عمومی X</option><option>فقط مستندات رسمی</option><option>منابع رسمی و وب‌سایت رقبا</option></select></label><div className="modal-hint"><i /> این درخواست ابتدا در صف هزینه قرار می‌گیرد و بدون تأیید اپراتور به محتوا تبدیل نمی‌شود.</div></form></ModalShell>}
+      {selectedEvidence && <ModalShell title={selectedEvidence.title} eyebrow={`امتیاز ارتباط ${selectedEvidence.score} از ۱۰۰`} onClose={() => setSelectedEvidence(null)} footer={<button className="btn accent" type="button" onClick={() => setSelectedEvidence(null)}>متوجه شدم</button>}><div className="evidence-list">{selectedEvidence.evidence.map((evidence, index) => <div key={evidence}><span>{(index + 1).toLocaleString("fa-IR")}</span><p>{evidence}</p></div>)}</div><div className="modal-context"><span>دامنه بررسی</span><p>{selectedEvidence.meta}</p></div></ModalShell>}
     </section>
   );
 }
@@ -542,9 +706,29 @@ function BudgetView() {
 }
 
 function SettingsView() {
-  const [polling, setPolling] = useState(true);
-  const [firecrawl, setFirecrawl] = useState(true);
-  return <section className="settings-grid"><article className="panel settings-card"><div className="panel-head"><div><span className="eyebrow">اتصال به X</span><h3>پایش Owned Reads</h3></div><button className={`switch ${polling ? "on" : ""}`} onClick={() => setPolling(!polling)} aria-label="فعال یا غیرفعال‌کردن پایش"><i/></button></div><div className="x-account-card"><span className="avatar">WT</span><div><small>اکانت رسمی پروژه</small><strong dir="ltr">{X_ACCOUNT_HANDLE}</strong></div><a href={X_ACCOUNT_URL} target="_blank" rel="noreferrer">مشاهده در X ↗</a></div><label>فاصله زمانی پایش<select defaultValue="120"><option value="120">هر ۲ دقیقه</option><option value="300">هر ۵ دقیقه</option></select></label><label>سقف قطعی ماهانه<div className="input-prefix"><span>$</span><input defaultValue="10.00"/></div></label><div className="settings-note">سامانه مقدار <code>since_id</code> را ذخیره می‌کند و هیچ پاسخ را عمداً دوبار دریافت نمی‌کند.</div></article><article className="panel settings-card"><div className="panel-head"><div><span className="eyebrow">قوانین کانتکست</span><h3>غنی‌سازی با Firecrawl</h3></div><button className={`switch ${firecrawl ? "on" : ""}`} onClick={() => setFirecrawl(!firecrawl)} aria-label="فعال یا غیرفعال‌کردن Firecrawl"><i/></button></div><label className="check-row"><input type="checkbox" defaultChecked/><span><strong>پاسخ‌های کم‌اطمینان</strong><small>اطمینان کمتر از ۸۲٪</small></span></label><label className="check-row"><input type="checkbox" defaultChecked/><span><strong>لینک‌ها و ادعاهای خارجی</strong><small>بررسی آدرس‌ها و اطلاعات عمومی روز</small></span></label><label className="check-row"><input type="checkbox" defaultChecked/><span><strong>حساب‌های عمومی مهم</strong><small>افزودن پروفایل عمومی و سابقه گفتگو</small></span></label></article></section>;
+  const [settings, setSettings] = useState(() => {
+    if (typeof window === "undefined") return SETTINGS_DEFAULTS;
+    try {
+      const stored = JSON.parse(window.localStorage.getItem("wallet-social-settings") || "null");
+      return stored && typeof stored === "object" ? { ...SETTINGS_DEFAULTS, ...stored } : SETTINGS_DEFAULTS;
+    } catch {
+      return SETTINGS_DEFAULTS;
+    }
+  });
+  const [saved, setSaved] = useState(false);
+  const saveSettings = () => {
+    window.localStorage.setItem("wallet-social-settings", JSON.stringify(settings));
+    setSaved(true);
+    window.setTimeout(() => setSaved(false), 2400);
+  };
+  return <section>
+    <div className="settings-grid">
+      <article className="panel settings-card"><div className="panel-head"><div><span className="eyebrow">اتصال به X</span><h3>پایش Owned Reads</h3></div><button className={`switch ${settings.polling ? "on" : ""}`} onClick={() => setSettings({ ...settings, polling: !settings.polling })} aria-label="فعال یا غیرفعال‌کردن پایش" aria-pressed={settings.polling}><i/></button></div><div className="x-account-card"><span className="avatar">WT</span><div><small>اکانت رسمی پروژه</small><strong dir="ltr">{X_ACCOUNT_HANDLE}</strong></div><a href={X_ACCOUNT_URL} target="_blank" rel="noreferrer">مشاهده در X ↗</a></div><label>فاصله زمانی پایش<select value={settings.interval} onChange={(event) => setSettings({ ...settings, interval: event.target.value })}><option value="120">هر ۲ دقیقه</option><option value="300">هر ۵ دقیقه</option></select></label><label>سقف قطعی ماهانه<div className="input-prefix"><span>$</span><input inputMode="decimal" value={settings.budget} onChange={(event) => setSettings({ ...settings, budget: event.target.value })}/></div></label><div className="settings-note">سامانه مقدار <code>since_id</code> را ذخیره می‌کند و هیچ پاسخ را عمداً دوبار دریافت نمی‌کند.</div></article>
+      <article className="panel settings-card"><div className="panel-head"><div><span className="eyebrow">قوانین کانتکست</span><h3>غنی‌سازی با Firecrawl</h3></div><button className={`switch ${settings.firecrawl ? "on" : ""}`} onClick={() => setSettings({ ...settings, firecrawl: !settings.firecrawl })} aria-label="فعال یا غیرفعال‌کردن Firecrawl" aria-pressed={settings.firecrawl}><i/></button></div><label className="check-row"><input type="checkbox" checked={settings.lowConfidence} onChange={(event) => setSettings({ ...settings, lowConfidence: event.target.checked })}/><span><strong>پاسخ‌های کم‌اطمینان</strong><small>اطمینان کمتر از ۸۲٪</small></span></label><label className="check-row"><input type="checkbox" checked={settings.externalClaims} onChange={(event) => setSettings({ ...settings, externalClaims: event.target.checked })}/><span><strong>لینک‌ها و ادعاهای خارجی</strong><small>بررسی آدرس‌ها و اطلاعات عمومی روز</small></span></label><label className="check-row"><input type="checkbox" checked={settings.importantAccounts} onChange={(event) => setSettings({ ...settings, importantAccounts: event.target.checked })}/><span><strong>حساب‌های عمومی مهم</strong><small>افزودن پروفایل عمومی و سابقه گفتگو</small></span></label></article>
+    </div>
+    <div className="settings-savebar"><div><strong>تغییرات تنظیمات</strong><span>پس از بررسی مقادیر، تنظیمات را برای این میز اپراتور ذخیره کنید.</span></div><button className={`btn accent ${saved ? "done" : ""}`} type="button" onClick={saveSettings}>{saved ? "✓ تنظیمات ذخیره شد" : "ذخیره تنظیمات"}</button></div>
+    {saved && <div className="toast">✓ تنظیمات با موفقیت ذخیره شد</div>}
+  </section>;
 }
 
 export default function DashboardClient() {
@@ -558,6 +742,8 @@ export default function DashboardClient() {
   const transitionTimers = useRef<number[]>([]);
   const sentReplies = useStoredIds("wallet-social-sent-replies");
   const sentPosts = useStoredIds("wallet-social-sent-posts");
+  const managedReplies = useStoredCollection<ReplyItem>("wallet-social-reply-items", replies);
+  const managedContent = useStoredCollection<ContentItem>("wallet-social-content-items", contentItems);
 
   useEffect(() => {
     const initialView = viewFromPathname(window.location.pathname);
@@ -660,9 +846,9 @@ export default function DashboardClient() {
         <div className={`content content-stage ${transitionPhase === "leaving" ? "is-leaving" : ""}`} aria-busy={isLoading || transitionPhase !== "idle"}>
           {(isLoading || transitionPhase === "loading") ? <ViewSkeleton /> : <div className="view-enter" key={view}>
             {view === "overview" && <Overview onNavigate={changeView}/>} 
-            {view === "replies" && <RepliesView sentIds={sentReplies.ids} onMarkSent={sentReplies.mark}/>}
-            {view === "content" && <ContentView sentIds={sentPosts.ids} onMarkSent={sentPosts.mark}/>}
-            {view === "sent" && <SentView replyIds={sentReplies.ids} postIds={sentPosts.ids}/>}
+            {view === "replies" && <RepliesView replyItems={managedReplies.items} onRepliesChange={managedReplies.setItems} sentIds={sentReplies.ids} onMarkSent={sentReplies.mark}/>}
+            {view === "content" && <ContentView content={managedContent.items} onContentChange={managedContent.setItems} sentIds={sentPosts.ids} onMarkSent={sentPosts.mark}/>}
+            {view === "sent" && <SentView replyIds={sentReplies.ids} postIds={sentPosts.ids} replyItems={managedReplies.items} content={managedContent.items}/>}
             {view === "telegram" && <TelegramView onNavigate={changeView}/>}
             {view === "research" && <ResearchView/>}
             {view === "budget" && <BudgetView/>}
