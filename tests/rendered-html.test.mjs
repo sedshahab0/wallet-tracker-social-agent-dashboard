@@ -84,6 +84,8 @@ test("keeps the human publishing and Telegram workflows in the dashboard", async
   assert.match(css, /\.action-menu/);
   assert.match(css, /prefers-reduced-motion: reduce/);
   assert.match(css, /overflow-x: hidden/);
+  assert.match(css, /\.sidebar::\-webkit-scrollbar-thumb/);
+  assert.match(css, /scrollbar-color: rgba\(255,116,23,\.62\) transparent/);
   assert.match(layout, /lang="fa" dir="rtl"/);
   assert.doesNotMatch(page, /fc-[a-zA-Z0-9_-]+/);
 });
