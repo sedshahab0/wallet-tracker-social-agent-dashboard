@@ -26,6 +26,8 @@ test("server-renders the secure Persian login", async () => {
   assert.match(html, /ورود به داشبورد/);
   assert.match(html, /wallet-tracker-x-avatar-400/);
   assert.match(html, /wallet-tracker-browser-icon/);
+  assert.doesNotMatch(html, /سشن رمزنگاری‌شده/);
+  assert.match(html, /<form[^>]+novalidate/i);
 });
 
 test("protects dashboard routes and preserves the requested destination", async () => {

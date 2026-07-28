@@ -14,6 +14,10 @@ export default function LoginForm({ nextPath }: { nextPath: string }) {
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (submitting) return;
+    if (!username.trim() || !password) {
+      setError(!username.trim() ? "نام کاربری را وارد کنید." : "رمز عبور را وارد کنید.");
+      return;
+    }
     setSubmitting(true);
     setError("");
     try {
@@ -63,17 +67,17 @@ export default function LoginForm({ nextPath }: { nextPath: string }) {
             <p>برای ورود به مرکز مدیریت شبکه اجتماعی، اطلاعات حساب اپراتور را وارد کنید.</p>
           </div>
 
-          <form className="login-form" onSubmit={submit}>
+          <form className="login-form" onSubmit={submit} noValidate>
             <label htmlFor="dashboard-username">نام کاربری</label>
-            <div className="login-field">
+            <div className={`login-field ${error && !username.trim() ? "invalid" : ""}`}>
               <span aria-hidden="true">◎</span>
-              <input id="dashboard-username" name="username" type="text" dir="ltr" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} placeholder="operator" required autoFocus />
+              <input id="dashboard-username" name="username" type="text" dir="ltr" autoComplete="username" value={username} onChange={(event) => { setUsername(event.target.value); setError(""); }} placeholder="operator" aria-invalid={Boolean(error && !username.trim())} autoFocus />
             </div>
 
             <label htmlFor="dashboard-password">رمز عبور</label>
-            <div className="login-field">
+            <div className={`login-field ${error && username.trim() && !password ? "invalid" : ""}`}>
               <span aria-hidden="true">◇</span>
-              <input id="dashboard-password" name="password" type={showPassword ? "text" : "password"} dir="ltr" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="••••••••••••" required />
+              <input id="dashboard-password" name="password" type={showPassword ? "text" : "password"} dir="ltr" autoComplete="current-password" value={password} onChange={(event) => { setPassword(event.target.value); setError(""); }} placeholder="••••••••••••" aria-invalid={Boolean(error && username.trim() && !password)} />
               <button className="password-toggle" type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? "پنهان‌کردن رمز عبور" : "نمایش رمز عبور"}>{showPassword ? "◉" : "○"}</button>
             </div>
 
@@ -84,7 +88,6 @@ export default function LoginForm({ nextPath }: { nextPath: string }) {
             </button>
           </form>
 
-          <div className="login-security-note"><span>✓</span><p>سشن رمزنگاری‌شده، کوکی HttpOnly و محدودسازی تلاش‌های ناموفق فعال است.</p></div>
           <footer className="login-footer"><span>© ۲۰۲۶ Wallet Tracker</span><a href="https://wallettracker.app" target="_blank" rel="noreferrer">مشاهده وب‌سایت ↗</a></footer>
         </section>
       </section>
