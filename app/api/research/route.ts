@@ -118,6 +118,32 @@ async function notifyTelegram(request: Request, topic: string, sourceCount: numb
   return response.ok;
 }
 
+async function searchFirecrawl(apiKey: string, query: string) {
+  const proxyUrl = process.env.FIRECRAWL_PROXY_URL?.trim();
+  const proxySecret = process.env.RESEARCH_PROXY_SECRET?.trim();
+  const proxyBearer = process.env.FIRECRAWL_PROXY_BEARER?.trim();
+  const endpoint = proxyUrl && proxySecret ? proxyUrl : "https://api.firecrawl.dev/v2/search";
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  if (endpoint === proxyUrl) {
+    headers["x-research-proxy-key"] = proxySecret!;
+    if (proxyBearer) headers["OAI-Sites-Authorization"] = `Bearer ${proxyBearer}`;
+  } else {
+    headers.authorization = `Bearer ${apiKey}`;
+  }
+  return fetch(endpoint, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      query,
+      sources: ["web"],
+      limit: 8,
+      ignoreInvalidURLs: true,
+      timeout: 45_000,
+    }),
+    signal: AbortSignal.timeout(55_000),
+  });
+}
+
 export async function POST(request: Request) {
   if (!(await hasDashboardSession())) {
     return json({ ok: false, error: "نشست شما منقضی شده است؛ دوباره وارد داشبورد شوید." }, 401);
@@ -136,21 +162,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const response = await fetch("https://api.firecrawl.dev/v2/search", {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${apiKey}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        query: scopedQuery(topic, scope),
-        sources: ["web"],
-        limit: 8,
-        ignoreInvalidURLs: true,
-        timeout: 45_000,
-      }),
-      signal: AbortSignal.timeout(55_000),
-    });
+    const response = await searchFirecrawl(apiKey, scopedQuery(topic, scope));
     const payload = (await response.json().catch(() => ({}))) as FirecrawlSearchResponse;
     if (!response.ok || payload.success === false) {
       throw new Error(payload.error || `Firecrawl پاسخ نامعتبر داد (${response.status}).`);
