@@ -31,6 +31,22 @@ type ContentItem = {
   source: string;
   postText: string;
 };
+type ResearchSource = {
+  title: string;
+  url: string;
+  description: string;
+};
+type ResearchItem = {
+  id: string;
+  score: number;
+  title: string;
+  meta: string;
+  tag: string;
+  evidence: string[];
+  sources?: ResearchSource[];
+  summary?: string;
+  completedAt?: string;
+};
 type TelegramConnection = {
   configured: boolean;
   connected: boolean;
@@ -204,6 +220,12 @@ const telegramAlerts = [
   { id: "t-4", icon: "$", tone: "warning", title: "بودجه به ۴۲٪ رسیده است", body: "۴٫۲۰ دلار از سقف ۱۰ دلار مصرف شده؛ هشدار بعدی در ۵ دلار ارسال می‌شود.", time: "۱ ساعت پیش", cta: "دیدن بودجه", target: "budget" as View },
 ];
 
+const defaultResearchItems: ResearchItem[] = [
+  { id: "research-security", score: 92, title: "پرسش‌های امنیت کیف‌پول در حال افزایش است", meta: "۱۸ پست X · ۷ منبع · انگلیسی و اسپانیایی", tag: "فرصت محتوایی", evidence: ["۷ منبع عمومی مستقل بررسی شده‌اند.", "پرسش‌های پرتکرار درباره کلید خصوصی و عبارت بازیابی بوده‌اند.", "پیشنهاد: یک رشته‌پست آموزشی بدون توصیه مالی آماده شود."] },
+  { id: "research-solana", score: 86, title: "اعتمادپذیری اعلان‌های سولانا یک دغدغه پرتکرار است", meta: "۱۱ گفتگو · ۵ منبع · ۱۲ ساعت", tag: "آموزش محصول", evidence: ["۱۱ گفتگو در بازه ۱۲ ساعته دسته‌بندی شده‌اند.", "بیشترین ابهام مربوط به زمان دریافت اعلان است.", "پیشنهاد: تفاوت تأیید شبکه و اعلان اپلیکیشن توضیح داده شود."] },
+  { id: "research-base", score: 74, title: "یکی از رقبا پشتیبانی از Base را اضافه کرد", meta: "نسخه تأیید شد · ۳ منشن پشتیبان", tag: "سیگنال رقابتی", evidence: ["صفحه رسمی محصول و یادداشت نسخه با یکدیگر تطبیق داده شدند.", "سه گفتگوی عمومی قابلیت جدید را تأیید می‌کنند.", "این سیگنال پیش از ورود به صف محتوا به بررسی محصول نیاز دارد."] },
+];
+
 function useStoredIds(key: string) {
   const [ids, setIds] = useState<string[]>([]);
   const [ready, setReady] = useState(false);
@@ -240,7 +262,7 @@ function useStoredCollection<T>(key: string, initialItems: T[]) {
   return { items, setItems };
 }
 
-function ModalShell({ title, eyebrow, children, footer, onClose }: { title: string; eyebrow: string; children: ReactNode; footer: ReactNode; onClose: () => void }) {
+function ModalShell({ title, eyebrow, children, footer, onClose, closeDisabled = false }: { title: string; eyebrow: string; children: ReactNode; footer: ReactNode; onClose: () => void; closeDisabled?: boolean }) {
   const closeButton = useRef<HTMLButtonElement>(null);
   const onCloseRef = useRef(onClose);
   useEffect(() => {
@@ -249,7 +271,7 @@ function ModalShell({ title, eyebrow, children, footer, onClose }: { title: stri
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
     const handleKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onCloseRef.current();
+      if (event.key === "Escape" && !closeDisabled) onCloseRef.current();
     };
     document.body.style.overflow = "hidden";
     document.addEventListener("keydown", handleKey);
@@ -258,13 +280,13 @@ function ModalShell({ title, eyebrow, children, footer, onClose }: { title: stri
       document.body.style.overflow = previousOverflow;
       document.removeEventListener("keydown", handleKey);
     };
-  }, []);
+  }, [closeDisabled]);
   return createPortal(
-    <div className="modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) onClose(); }}>
+    <div className="modal-backdrop" onMouseDown={(event) => { if (!closeDisabled && event.currentTarget === event.target) onClose(); }}>
       <section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="dashboard-modal-title">
         <header className="modal-head">
           <div><span className="eyebrow">{eyebrow}</span><h2 id="dashboard-modal-title">{title}</h2></div>
-          <button ref={closeButton} className="modal-close" type="button" onClick={onClose} aria-label="بستن پنجره">×</button>
+          <button ref={closeButton} className="modal-close" type="button" onClick={onClose} aria-label="بستن پنجره" disabled={closeDisabled}>×</button>
         </header>
         <div className="modal-body">{children}</div>
         <footer className="modal-footer">{footer}</footer>
@@ -657,36 +679,102 @@ function TelegramView({ onNavigate }: { onNavigate: (view: View) => void }) {
 }
 
 function ResearchView() {
-  const researchItems = [
-    { score: 92, title: "پرسش‌های امنیت کیف‌پول در حال افزایش است", meta: "۱۸ پست X · ۷ منبع · انگلیسی و اسپانیایی", tag: "فرصت محتوایی", evidence: ["۷ منبع عمومی مستقل بررسی شده‌اند.", "پرسش‌های پرتکرار درباره کلید خصوصی و عبارت بازیابی بوده‌اند.", "پیشنهاد: یک رشته‌پست آموزشی بدون توصیه مالی آماده شود."] },
-    { score: 86, title: "اعتمادپذیری اعلان‌های سولانا یک دغدغه پرتکرار است", meta: "۱۱ گفتگو · ۵ منبع · ۱۲ ساعت", tag: "آموزش محصول", evidence: ["۱۱ گفتگو در بازه ۱۲ ساعته دسته‌بندی شده‌اند.", "بیشترین ابهام مربوط به زمان دریافت اعلان است.", "پیشنهاد: تفاوت تأیید شبکه و اعلان اپلیکیشن توضیح داده شود."] },
-    { score: 74, title: "یکی از رقبا پشتیبانی از Base را اضافه کرد", meta: "نسخه تأیید شد · ۳ منشن پشتیبان", tag: "سیگنال رقابتی", evidence: ["صفحه رسمی محصول و یادداشت نسخه با یکدیگر تطبیق داده شدند.", "سه گفتگوی عمومی قابلیت جدید را تأیید می‌کنند.", "این سیگنال پیش از ورود به صف محتوا به بررسی محصول نیاز دارد."] },
-  ];
+  const [researchItems, setResearchItems] = useState<ResearchItem[]>(defaultResearchItems);
+  const [researchReady, setResearchReady] = useState(false);
   const [researchOpen, setResearchOpen] = useState(false);
-  const [selectedEvidence, setSelectedEvidence] = useState<(typeof researchItems)[number] | null>(null);
+  const [selectedEvidence, setSelectedEvidence] = useState<ResearchItem | null>(null);
   const [topic, setTopic] = useState("");
   const [sourceScope, setSourceScope] = useState("منابع رسمی و گفتگوهای عمومی X");
-  const [running, setRunning] = useState(false);
+  const [runState, setRunState] = useState<"idle" | "running" | "success" | "error">("idle");
+  const [progressStep, setProgressStep] = useState(0);
+  const [runError, setRunError] = useState("");
+  const [completedResult, setCompletedResult] = useState<ResearchItem | null>(null);
+  const [telegramNotified, setTelegramNotified] = useState(false);
   const [toast, setToast] = useState("");
-  const runResearch = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!topic.trim()) return;
-    setRunning(true);
-    window.setTimeout(() => {
-      setRunning(false);
-      setResearchOpen(false);
-      setTopic("");
-      setToast("پژوهش هدفمند در صف بررسی قرار گرفت");
-      window.setTimeout(() => setToast(""), 2400);
-    }, 650);
+  const running = runState === "running";
+  const progressLabels = ["ارسال درخواست امن به Firecrawl", "جست‌وجو و جمع‌آوری منابع زنده", "حذف نتایج تکراری و آماده‌سازی شواهد", "ارسال اعلان پایان کار به تلگرام"];
+
+  useEffect(() => {
+    const hydrationTimer = window.setTimeout(() => {
+      try {
+        const stored = JSON.parse(window.localStorage.getItem("wallet-social-research-results") || "null");
+        if (Array.isArray(stored) && stored.length) setResearchItems(stored);
+      } catch {
+        setResearchItems(defaultResearchItems);
+      }
+      setResearchReady(true);
+    }, 0);
+    return () => window.clearTimeout(hydrationTimer);
+  }, []);
+  useEffect(() => {
+    if (researchReady) window.localStorage.setItem("wallet-social-research-results", JSON.stringify(researchItems));
+  }, [researchItems, researchReady]);
+
+  const openResearch = () => {
+    setRunState("idle");
+    setRunError("");
+    setCompletedResult(null);
+    setTelegramNotified(false);
+    setProgressStep(0);
+    setResearchOpen(true);
   };
+  const closeResearch = () => {
+    if (!running) setResearchOpen(false);
+  };
+  const runResearch = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (topic.trim().length < 8 || running) return;
+    setRunState("running");
+    setRunError("");
+    setProgressStep(0);
+    const progressTimer = window.setInterval(() => {
+      setProgressStep((step) => Math.min(step + 1, 2));
+    }, 1900);
+    try {
+      const response = await fetch("/api/research", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ topic: topic.trim(), scope: sourceScope }),
+      });
+      const data = await response.json() as { ok?: boolean; result?: ResearchItem; telegramNotified?: boolean; error?: string };
+      if (!response.ok || !data.ok || !data.result) throw new Error(data.error || "اجرای پژوهش ناموفق بود.");
+      setProgressStep(3);
+      setResearchItems((current) => [data.result!, ...current.filter((item) => item.id !== data.result!.id)]);
+      setCompletedResult(data.result);
+      setTelegramNotified(Boolean(data.telegramNotified));
+      setRunState("success");
+      setToast(data.telegramNotified ? "پژوهش تکمیل شد و تلگرام مطلع شد" : "پژوهش تکمیل شد؛ اعلان تلگرام ارسال نشد");
+      window.setTimeout(() => setToast(""), 4200);
+    } catch (error) {
+      setRunError(error instanceof Error ? error.message : "اجرای پژوهش ناموفق بود.");
+      setRunState("error");
+    } finally {
+      window.clearInterval(progressTimer);
+    }
+  };
+
+  const modalFooter = runState === "running" ? (
+    <button className="btn accent research-running-button" type="button" disabled><span className="button-spinner" /> پژوهش در حال اجراست…</button>
+  ) : runState === "success" ? (
+    <><button className="btn quiet" type="button" onClick={closeResearch}>بستن</button><button className="btn accent" type="button" onClick={() => { setResearchOpen(false); setSelectedEvidence(completedResult); }}>مشاهده نتیجه و منابع</button></>
+  ) : runState === "error" ? (
+    <><button className="btn quiet" type="button" onClick={closeResearch}>انصراف</button><button className="btn accent" type="button" onClick={() => setRunState("idle")}>اصلاح و تلاش دوباره</button></>
+  ) : (
+    <><button className="btn quiet" type="button" onClick={closeResearch}>انصراف</button><button className="btn accent" type="submit" form="research-request-form" disabled={topic.trim().length < 8}>شروع پژوهش</button></>
+  );
+
   return (
     <section className="research-grid">
-      <article className="panel research-hero"><span className="eyebrow">بررسی انتخابی</span><h2>Firecrawl فقط وقتی اجرا می‌شود که کانتکست ارزش هزینه را داشته باشد.</h2><p>هر سیگنال از نظر ارتباط، تازگی و اعتبار منبع امتیاز می‌گیرد و سپس وارد صف محتوا می‌شود.</p><button className="btn accent" onClick={() => setResearchOpen(true)}>اجرای پژوهش هدفمند</button></article>
-      {researchItems.map((item) => <article className="panel research-card" key={item.title}><div className="score">{item.score}</div><div><span>{item.tag}</span><h3>{item.title}</h3><p>{item.meta}</p></div><button className="text-btn" onClick={() => setSelectedEvidence(item)}>بررسی شواهد ←</button></article>)}
+      <article className="panel research-hero"><span className="eyebrow">بررسی انتخابی</span><h2>Firecrawl فقط وقتی اجرا می‌شود که کانتکست ارزش هزینه را داشته باشد.</h2><p>پس از شروع، وضعیت پژوهش مرحله‌به‌مرحله نمایش داده می‌شود؛ نتیجه همراه منابع در همین صفحه می‌ماند و پایان کار در تلگرام اعلام می‌شود.</p><button className="btn accent" onClick={openResearch}>اجرای پژوهش هدفمند</button></article>
+      {researchItems.map((item) => <article className="panel research-card" key={item.id}><div className="score">{item.score}</div><div><span>{item.tag}</span><h3>{item.title}</h3><p>{item.meta}</p></div><button className="text-btn" onClick={() => setSelectedEvidence(item)}>بررسی شواهد ←</button></article>)}
       {toast && <div className="toast">✓ {toast}</div>}
-      {researchOpen && <ModalShell title="پژوهش هدفمند جدید" eyebrow="Firecrawl انتخابی" onClose={() => setResearchOpen(false)} footer={<><button className="btn quiet" type="button" onClick={() => setResearchOpen(false)}>انصراف</button><button className="btn accent" type="submit" form="research-request-form" disabled={!topic.trim() || running}>{running ? "در حال ثبت…" : "ثبت پژوهش"}</button></>}><form id="research-request-form" className="modal-form" onSubmit={runResearch}><label>موضوع یا پرسش پژوهش<textarea rows={4} value={topic} onChange={(event) => setTopic(event.target.value)} placeholder="مثلاً دغدغه‌های کاربران درباره امنیت کیف‌پول چیست؟" autoFocus /></label><label>دامنه منابع<select value={sourceScope} onChange={(event) => setSourceScope(event.target.value)}><option>منابع رسمی و گفتگوهای عمومی X</option><option>فقط مستندات رسمی</option><option>منابع رسمی و وب‌سایت رقبا</option></select></label><div className="modal-hint"><i /> این درخواست ابتدا در صف هزینه قرار می‌گیرد و بدون تأیید اپراتور به محتوا تبدیل نمی‌شود.</div></form></ModalShell>}
-      {selectedEvidence && <ModalShell title={selectedEvidence.title} eyebrow={`امتیاز ارتباط ${selectedEvidence.score} از ۱۰۰`} onClose={() => setSelectedEvidence(null)} footer={<button className="btn accent" type="button" onClick={() => setSelectedEvidence(null)}>متوجه شدم</button>}><div className="evidence-list">{selectedEvidence.evidence.map((evidence, index) => <div key={evidence}><span>{(index + 1).toLocaleString("fa-IR")}</span><p>{evidence}</p></div>)}</div><div className="modal-context"><span>دامنه بررسی</span><p>{selectedEvidence.meta}</p></div></ModalShell>}
+      {researchOpen && <ModalShell title={runState === "success" ? "پژوهش با موفقیت تکمیل شد" : runState === "error" ? "پژوهش تکمیل نشد" : running ? "پژوهش زنده در حال اجراست" : "پژوهش هدفمند جدید"} eyebrow="Firecrawl انتخابی" onClose={closeResearch} closeDisabled={running} footer={modalFooter}>
+        {runState === "idle" && <form id="research-request-form" className="modal-form" onSubmit={runResearch}><label>موضوع یا پرسش پژوهش<textarea rows={4} value={topic} onChange={(event) => setTopic(event.target.value)} placeholder="مثلاً دغدغه‌های کاربران درباره امنیت کیف‌پول چیست؟" autoFocus maxLength={500} /></label><label>دامنه منابع<select value={sourceScope} onChange={(event) => setSourceScope(event.target.value)}><option>منابع رسمی و گفتگوهای عمومی X</option><option>فقط مستندات رسمی</option><option>منابع رسمی و وب‌سایت رقبا</option></select></label><div className="character-count"><span>{topic.trim().length.toLocaleString("fa-IR")} / ۵۰۰ نویسه</span><small>{topic.trim().length > 0 && topic.trim().length < 8 ? "پرسش را کمی دقیق‌تر بنویسید." : "پژوهش فقط با تأیید شما اجرا می‌شود."}</small></div><div className="modal-hint"><i /> نتیجه مستقیماً منتشر نمی‌شود؛ ابتدا شواهد برای بررسی انسانی در داشبورد ذخیره می‌شوند.</div></form>}
+        {running && <div className="research-progress" aria-live="polite" aria-busy="true"><div className="research-orbit"><i /><span /><b /></div><div><strong>در حال بررسی «{topic.trim()}»</strong><p>این پنجره پس از تکمیل خودکار به نتیجه تغییر می‌کند.</p></div><ol>{progressLabels.map((label, index) => <li className={index < progressStep ? "done" : index === progressStep ? "active" : ""} key={label}><span>{index < progressStep ? "✓" : (index + 1).toLocaleString("fa-IR")}</span><div><strong>{label}</strong><small>{index < progressStep ? "انجام شد" : index === progressStep ? "در حال انجام…" : "در انتظار"}</small></div></li>)}</ol></div>}
+        {runState === "success" && completedResult && <div className="research-complete"><span className="success-mark">✓</span><h3>{completedResult.title}</h3><p>{completedResult.summary}</p><div className="completion-stats"><span><b>{completedResult.sources?.length.toLocaleString("fa-IR") || "۰"}</b> منبع زنده</span><span className={telegramNotified ? "notified" : "warning"}><b>{telegramNotified ? "✓" : "!"}</b> {telegramNotified ? "اعلان تلگرام ارسال شد" : "اعلان تلگرام ارسال نشد"}</span></div></div>}
+        {runState === "error" && <div className="research-error" role="alert"><span>!</span><div><strong>درخواست اجرا نشد</strong><p>{runError}</p><small>هیچ محتوایی منتشر نشده و می‌توانید متن را اصلاح و دوباره تلاش کنید.</small></div></div>}
+      </ModalShell>}
+      {selectedEvidence && <ModalShell title={selectedEvidence.title} eyebrow={`امتیاز ارتباط ${selectedEvidence.score} از ۱۰۰`} onClose={() => setSelectedEvidence(null)} footer={<button className="btn accent" type="button" onClick={() => setSelectedEvidence(null)}>متوجه شدم</button>}><div className="evidence-list">{selectedEvidence.evidence.map((evidence, index) => <div key={`${index}-${evidence}`}><span>{(index + 1).toLocaleString("fa-IR")}</span><p>{evidence}</p></div>)}</div>{selectedEvidence.sources?.length ? <div className="research-sources"><strong>منابع قابل بررسی</strong>{selectedEvidence.sources.map((source) => <a href={source.url} target="_blank" rel="noreferrer" key={source.url}><span>{source.title}</span><small>{source.url.replace(/^https?:\/\//, "").split("/")[0]} ↗</small></a>)}</div> : null}<div className="modal-context"><span>دامنه بررسی</span><p>{selectedEvidence.meta}</p></div></ModalShell>}
     </section>
   );
 }

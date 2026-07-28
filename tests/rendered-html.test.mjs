@@ -62,6 +62,10 @@ test("keeps the human publishing and Telegram workflows in the dashboard", async
   assert.match(page, /reply-editor-form/);
   assert.match(page, /content-editor-form/);
   assert.match(page, /research-request-form/);
+  assert.match(page, /\/api\/research/);
+  assert.match(page, /پژوهش زنده در حال اجراست/);
+  assert.match(page, /اعلان تلگرام ارسال شد/);
+  assert.match(page, /wallet-social-research-results/);
   assert.match(page, /aria-modal="true"/);
   assert.match(page, /event\.key === "Escape"/);
   assert.match(page, /transitionPhase/);
@@ -89,6 +93,20 @@ test("keeps Telegram credentials server-side", async () => {
   assert.match(route, /process\.env\.TELEGRAM_BOT_TOKEN/);
   assert.match(route, /sendMessage/);
   assert.doesNotMatch(route, /8856131466:/);
+});
+
+test("runs selective Firecrawl research server-side and announces completion", async () => {
+  const [route, exampleEnv] = await Promise.all([
+    readFile(new URL("../app/api/research/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../.env.example", import.meta.url), "utf8"),
+  ]);
+  assert.match(route, /api\.firecrawl\.dev\/v2\/search/);
+  assert.match(route, /process\.env\.FIRECRAWL_API_KEY/);
+  assert.match(route, /sendMessage/);
+  assert.match(route, /hasDashboardSession/);
+  assert.match(route, /telegramNotified/);
+  assert.match(exampleEnv, /FIRECRAWL_API_KEY=\n/);
+  assert.doesNotMatch(route, /fc-[a-zA-Z0-9_-]+/);
 });
 
 test("keeps dashboard credentials server-side and signs the session", async () => {
