@@ -38,7 +38,7 @@ export default function LoginForm({ nextPath }: { nextPath: string }) {
       <section className="login-shell" aria-label="ورود به مرکز مدیریت Wallet Tracker">
         <aside className="login-story">
           <a className="login-brand" href="https://wallettracker.app" target="_blank" rel="noreferrer">
-            <Image src="/brand/wallet-tracker-x-avatar-400.png" alt="" width={52} height={52} priority />
+            <Image src="/brand/wallet-tracker-x-avatar-400.png" alt="لوگوی Wallet Tracker" width={52} height={52} priority unoptimized />
             <span><strong>Wallet Tracker</strong><small>Social Operations</small></span>
           </a>
           <span className="login-private"><i /> فضای کاری خصوصی</span>
@@ -56,7 +56,7 @@ export default function LoginForm({ nextPath }: { nextPath: string }) {
         </aside>
 
         <section className="login-panel">
-          <div className="login-mobile-brand"><Image src="/brand/wallet-tracker-x-avatar-400.png" alt="" width={34} height={34} priority /><strong>Wallet Tracker</strong></div>
+          <div className="login-mobile-brand"><Image src="/brand/wallet-tracker-x-avatar-400.png" alt="لوگوی Wallet Tracker" width={34} height={34} priority unoptimized /><strong>Wallet Tracker</strong></div>
           <span className="secure-access"><i>✓</i> دسترسی امن</span>
           <div className="login-heading">
             <h2>خوش آمدید</h2>

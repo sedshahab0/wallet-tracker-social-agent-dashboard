@@ -12,8 +12,9 @@ export const metadata: Metadata = {
   title: "والت سوشال · مرکز مدیریت شبکه اجتماعی",
   description: "داشبورد فارسی مدیریت محتوا و پاسخ‌گویی هوشمند Wallet Tracker",
   icons: {
-    icon: "/favicon.svg",
-    shortcut: "/favicon.svg",
+    icon: [{ url: "/brand/wallet-tracker-browser-icon.png", type: "image/png", sizes: "64x64" }],
+    shortcut: "/brand/wallet-tracker-browser-icon.png",
+    apple: "/brand/wallet-tracker-x-avatar-400.png",
   },
 };
 
