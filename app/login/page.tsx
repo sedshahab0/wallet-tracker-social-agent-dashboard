@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import LoginForm from "./login-form";
-import { hasDashboardSession, safeDashboardPath } from "@/lib/auth";
+import { dashboardRedirectUrl, hasDashboardSession, safeDashboardPath } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +17,6 @@ export default async function LoginPage({
 }) {
   const params = await searchParams;
   const nextPath = safeDashboardPath(typeof params.next === "string" ? params.next : "/");
-  if (await hasDashboardSession()) redirect(nextPath);
+  if (await hasDashboardSession()) redirect(dashboardRedirectUrl(nextPath));
   return <LoginForm nextPath={nextPath} />;
 }

@@ -91,3 +91,13 @@ export function safeDashboardPath(value?: string | null) {
   }
   return allowedPaths.has(url.pathname) ? url.pathname : "/";
 }
+
+export function dashboardRedirectUrl(path: string) {
+  const dashboardUrl = process.env.NEXT_PUBLIC_DASHBOARD_URL;
+  if (!dashboardUrl) return path;
+  try {
+    return new URL(path, dashboardUrl).toString();
+  } catch {
+    return path;
+  }
+}
