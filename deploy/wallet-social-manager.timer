@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Wallet Tracker social manager every morning
+
+[Timer]
+OnCalendar=*-*-* 06:15:00 Asia/Tehran
+Persistent=true
+RandomizedDelaySec=120
+Unit=wallet-social-manager.service
+
+[Install]
+WantedBy=timers.target

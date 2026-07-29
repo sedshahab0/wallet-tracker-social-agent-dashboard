@@ -184,7 +184,7 @@ test("keeps the operator flow simple and reserves X credit for owned mentions", 
     readFile(new URL("../app/api/x/mentions/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/x-api.ts", import.meta.url), "utf8"),
   ]);
-  assert.match(page, /امروز فقط این سه مرحله را انجام بده/);
+  assert.match(page, /مدیر هوشمند روزانه · داده زنده/);
   assert.match(page, /کارهای اپراتور · از بالا به پایین/);
   assert.match(page, /ابزارهای مدیر · اپراتور نیاز ندارد/);
   assert.match(page, /۵ دلار فقط برای خواندن کامنت‌های جدید/);
@@ -201,4 +201,35 @@ test("keeps the operator flow simple and reserves X credit for owned mentions", 
   assert.match(xApi, /X_ACCOUNT_ID/);
   assert.match(xApi, /oauth_signature_method: "HMAC-SHA1"/);
   assert.match(xApi, /X_ACCESS_TOKEN_SECRET/);
+});
+
+test("builds an evidence-bound daily manager with Firecrawl and xAI", async () => {
+  const [manager, planRoute, cronRoute, imageRoute, page, exampleEnv, timer] = await Promise.all([
+    readFile(new URL("../lib/social-manager.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/manager/daily-plan/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/manager/run/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/manager/image/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard-client.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../.env.example", import.meta.url), "utf8"),
+    readFile(new URL("../deploy/wallet-social-manager.timer", import.meta.url), "utf8"),
+  ]);
+  assert.match(manager, /api\.firecrawl\.dev\/v2\/search/);
+  assert.match(manager, /site:x\.com/);
+  assert.match(manager, /Promise\.allSettled/);
+  assert.match(manager, /api\.x\.ai\/v1\/chat\/completions/);
+  assert.match(manager, /json_schema/);
+  assert.match(manager, /evidenceBoundPlan/);
+  assert.match(manager, /allowedUrls\.has/);
+  assert.match(planRoute, /hasDashboardSession/);
+  assert.match(cronRoute, /timingSafeEqual/);
+  assert.match(cronRoute, /SOCIAL_MANAGER_CRON_SECRET/);
+  assert.match(imageRoute, /api\.x\.ai\/v1\/images\/generations/);
+  assert.match(imageRoute, /grok-imagine-image/);
+  assert.match(page, /مدیر هوشمند روزانه · داده زنده/);
+  assert.match(page, /Firecrawl در حال بررسی X/);
+  assert.match(page, /\/api\/manager\/image/);
+  assert.match(exampleEnv, /XAI_API_KEY=\n/);
+  assert.match(exampleEnv, /SOCIAL_MANAGER_CRON_SECRET=\n/);
+  assert.match(timer, /06:15:00 Asia\/Tehran/);
+  assert.doesNotMatch(`${manager}\n${imageRoute}\n${exampleEnv}`, /xai-[A-Za-z0-9_-]{20,}/);
 });

@@ -1,0 +1,12 @@
+[Unit]
+Description=Generate Wallet Tracker daily social plan
+After=network-online.target wallet-social-dashboard.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/wallet-social-dashboard.env
+ExecStart=/usr/bin/curl --fail --silent --show-error --max-time 240 --request POST --header "x-manager-cron-key: ${SOCIAL_MANAGER_CRON_SECRET}" http://127.0.0.1:3002/api/manager/run
+NoNewPrivileges=true
+PrivateTmp=true
+

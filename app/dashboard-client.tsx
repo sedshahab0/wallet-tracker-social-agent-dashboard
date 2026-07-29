@@ -3,6 +3,8 @@
 import type { FormEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import Image from "next/image";
+import type { DailyManagerPlan } from "@/lib/social-manager-types";
 
 type View = "overview" | "strategy" | "tasks" | "creative" | "growth" | "replies" | "content" | "sent" | "telegram" | "research" | "budget" | "settings";
 type Risk = "green" | "yellow" | "red";
@@ -30,6 +32,8 @@ type ContentItem = {
   time: string;
   source: string;
   postText: string;
+  imageUrl?: string;
+  sourceUrls?: string[];
 };
 type ResearchSource = {
   title: string;
@@ -282,6 +286,64 @@ function useStoredCollection<T>(key: string, initialItems: T[]) {
   return { items, setItems };
 }
 
+function useDailyManagerPlan() {
+  const [plan, setPlan] = useState<DailyManagerPlan | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [stage, setStage] = useState("در حال بررسی برنامه ذخیره‌شده امروز…");
+  const imageRequests = useRef(new Set<string>());
+
+  const generateImages = useCallback(async (dailyPlan: DailyManagerPlan) => {
+    const storageKey = `wallet-social-manager-images-${dailyPlan.date}`;
+    let stored: Record<string, string> = {};
+    try { stored = JSON.parse(localStorage.getItem(storageKey) || "{}"); } catch { stored = {}; }
+    if (Object.keys(stored).length) setPlan((current) => current ? { ...current, posts: current.posts.map((post) => ({ ...post, imageUrl: stored[post.id] || post.imageUrl })) } : current);
+    for (const post of dailyPlan.posts) {
+      if (stored[post.id] || imageRequests.current.has(post.id)) continue;
+      imageRequests.current.add(post.id);
+      try {
+        setStage(`در حال ساخت تصویر اختصاصی «${post.title}»…`);
+        const response = await fetch("/api/manager/image", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ prompt: post.imagePrompt }) });
+        const payload = await response.json() as { ok?: boolean; imageUrl?: string };
+        if (response.ok && payload.ok && payload.imageUrl) {
+          stored[post.id] = payload.imageUrl;
+          localStorage.setItem(storageKey, JSON.stringify(stored));
+          setPlan((current) => current ? { ...current, posts: current.posts.map((item) => item.id === post.id ? { ...item, imageUrl: payload.imageUrl } : item) } : current);
+        }
+      } finally {
+        imageRequests.current.delete(post.id);
+      }
+    }
+    setStage("برنامه زنده امروز آماده اجراست");
+  }, []);
+
+  const load = useCallback(async (force = false) => {
+    setLoading(true);
+    setError("");
+    setStage(force ? "در حال جمع‌آوری دوباره داده‌های زنده X و وب…" : "در حال دریافت برنامه هوشمند امروز…");
+    try {
+      let response = await fetch("/api/manager/daily-plan", { cache: "no-store" });
+      if (response.status === 404 || force) {
+        setStage("Firecrawl در حال بررسی X، اخبار و منابع محصول است…");
+        response = await fetch("/api/manager/daily-plan", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ force }) });
+      }
+      const payload = await response.json() as { ok?: boolean; plan?: DailyManagerPlan; error?: string };
+      if (!response.ok || !payload.ok || !payload.plan) throw new Error(payload.error || "برنامه امروز دریافت نشد.");
+      setPlan(payload.plan);
+      setStage("برنامه زنده آماده شد؛ تصاویر در حال تکمیل‌اند…");
+      void generateImages(payload.plan);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "دریافت برنامه زنده ناموفق بود.");
+      setStage("برنامه زنده در دسترس نیست");
+    } finally {
+      setLoading(false);
+    }
+  }, [generateImages]);
+
+  useEffect(() => { const timer = window.setTimeout(() => void load(false), 0); return () => window.clearTimeout(timer); }, [load]);
+  return { plan, loading, error, stage, regenerate: () => load(true) };
+}
+
 function ModalShell({ title, eyebrow, children, footer, onClose, closeDisabled = false }: { title: string; eyebrow: string; children: ReactNode; footer: ReactNode; onClose: () => void; closeDisabled?: boolean }) {
   const closeButton = useRef<HTMLButtonElement>(null);
   const onCloseRef = useRef(onClose);
@@ -339,24 +401,22 @@ function ViewSkeleton() {
   );
 }
 
-function Overview({ onNavigate }: { onNavigate: (view: View) => void }) {
+function Overview({ onNavigate, manager }: { onNavigate: (view: View) => void; manager: ReturnType<typeof useDailyManagerPlan> }) {
+  const { plan, loading, error, stage, regenerate } = manager;
   return (
     <section className="operator-home">
       <div className="operator-welcome panel">
-        <div><span className="eyebrow">راهنمای مستقیم اپراتور</span><h2>امروز فقط این سه مرحله را انجام بده.</h2><p>نیازی نیست چیزی درباره توییتر، پروژه یا استراتژی بدانی. از مرحله ۱ شروع کن و هرجا دکمه نارنجی دیدی، همان را بزن.</p></div>
-        <div className="today-clock"><span>زمان تقریبی کل</span><strong>۲۵ دقیقه</strong><small>در سه نوبت کوتاه</small></div>
+        <div><span className="eyebrow">مدیر هوشمند روزانه · داده زنده</span><h2>{plan?.headline || "در حال ساخت برنامه واقعی امروز…"}</h2><p>{plan?.strategy || "Firecrawl گفتگوهای عمومی X، خبرها و منابع محصول را بررسی می‌کند؛ سپس برنامه قدم‌به‌قدم ساخته می‌شود."}</p></div>
+        <div className="today-clock"><span>{plan ? "هدف امروز" : "وضعیت"}</span><strong>{plan?.publishDecision === "pause" ? "توقف انتشار" : plan ? `${plan.tasks.length.toLocaleString("fa-IR")} کار` : "در حال تحلیل"}</strong><small>{plan?.todayGoal || stage}</small></div>
       </div>
 
+      <div className={`manager-live-strip panel ${error ? "has-error" : ""}`}><div><i className="status-dot"/><span><strong>{stage}</strong><small>{plan ? `آخرین تحلیل: ${new Date(plan.generatedAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" })} · ${plan.sources.length.toLocaleString("fa-IR")} منبع زنده` : error || "این فرایند در اولین ورود هر روز خودکار اجرا می‌شود."}</small></span></div><button className="btn quiet" disabled={loading} onClick={() => void regenerate()}>{loading ? "در حال ساخت…" : "بازسازی با داده تازه ↻"}</button></div>
+
+      {plan && <article className={`publish-decision panel ${plan.publishDecision}`}><span>{plan.publishDecision === "publish" ? "امروز منتشر می‌کنیم" : plan.publishDecision === "light" ? "امروز سبک منتشر می‌کنیم" : "امروز پست تازه نمی‌گذاریم"}</span><strong>{plan.publishReason}</strong></article>}
+
       <div className="operator-journey">
-        <article className="operator-step panel lift-card current">
-          <span className="step-number">۱</span><div className="step-copy"><small>اول این کار را انجام بده</small><h3>پست آماده را منتشر کن</h3><p>متن آماده را کپی کن، تصویر را بردار و در اکانت X قرار بده. بعد دکمه «منتشر کردم» را بزن.</p><div className="step-warning">اگر پست برچسب زرد داشت، فعلاً منتشر نکن.</div></div><button className="btn accent" onClick={() => onNavigate("content")}>رفتن به پست آماده ←</button>
-        </article>
-        <article className="operator-step panel lift-card">
-          <span className="step-number">۲</span><div className="step-copy"><small>بعد از انتشار پست</small><h3>پاسخ‌های آماده را ارسال کن</h3><p>پاسخ پیشنهادی را کپی کن و زیر همان کامنت در X بگذار. پاسخ به زبان خود کاربر آماده شده است.</p><div className="step-safe">پاسخ سبز را می‌توانی ارسال کنی؛ پاسخ زرد را به مدیر نشان بده.</div></div><button className="btn quiet" onClick={() => onNavigate("replies")}>بازکردن صندوق پاسخ‌ها ←</button>
-        </article>
-        <article className="operator-step panel lift-card">
-          <span className="step-number">۳</span><div className="step-copy"><small>در پایان روز</small><h3>کارهای انجام‌شده را تیک بزن</h3><p>چهار کار کوتاه امروز را ببین و هرکدام که تمام شده تیک بزن. کار دیگری لازم نیست.</p></div><button className="btn quiet" onClick={() => onNavigate("tasks")}>دیدن لیست امروز ←</button>
-        </article>
+        {(plan?.tasks.slice(0, 3) || []).map((task, index) => <article className={`operator-step panel lift-card ${index === 0 ? "current" : ""}`} key={task.id}><span className="step-number">{(index + 1).toLocaleString("fa-IR")}</span><div className="step-copy"><small>{task.time} · {task.priority === "now" ? "الان انجام بده" : "امروز انجام بده"}</small><h3>{task.title}</h3><p>{task.instruction}</p><div className={task.risk === "green" ? "step-safe" : "step-warning"}>{task.why}</div></div><button className={index === 0 ? "btn accent" : "btn quiet"} onClick={() => onNavigate(task.kind === "publish" ? "content" : task.kind === "reply" ? "replies" : task.kind === "interact" ? "growth" : "tasks")}>رفتن به بخش ←</button></article>)}
+        {!plan && <article className="operator-step panel live-plan-loading"><span className="button-spinner"/><div><h3>{error ? "برنامه زنده ساخته نشد" : "مدیر هوشمند در حال کار است"}</h3><p>{error || "کمی صبر کنید؛ وظایف ساختگی نمایش داده نمی‌شوند."}</p></div></article>}
       </div>
 
       <div className="simple-status panel">
@@ -515,6 +575,7 @@ function ContentView({ content, onContentChange, sentIds, onMarkSent }: { conten
           return <article className={`panel content-card ${isSent ? "is-sent" : ""}`} key={item.id}>
             <div className="content-card-top"><span className="content-type">{item.type}</span>{isSent ? <span className="sent-chip">✓ منتشرشده</span> : <RiskBadge risk={item.risk} />}</div>
             <h3>{item.title}</h3><p>{item.body}</p>
+            {item.imageUrl ? <div className="generated-post-image"><Image src={item.imageUrl} alt={`تصویر اختصاصی ${item.title}`} width={1024} height={576} unoptimized /><span>تصویر تولیدشده با Grok Imagine · متناسب با همین پست</span></div> : <div className="generated-post-image pending"><span className="button-spinner"/><strong>تصویر اختصاصی در حال تولید است…</strong></div>}
             <div className="content-meta"><span>{item.language}</span><span>{item.time}</span></div>
             <div className="source-box"><span>منبع</span><strong>{item.source}</strong></div>
             <div className="publish-copy" dir="auto"><span>متن نهایی برای X</span><p>{item.postText}</p></div>
@@ -770,14 +831,20 @@ const dailyTaskSeed = [
   { id: 'daily-review', time: '۲۱:۳۰', title: 'مطمئن شو همه کارها ثبت شده‌اند', detail: 'صفحه کارهای انجام‌شده را باز کن و مطمئن شو پست و پاسخ‌هایی که فرستادی در لیست هستند.', target: 'sent' as View, priority: 'پایان روز' },
 ];
 
-function TasksView({ onNavigate }: { onNavigate: (view: View) => void }) {
+function TasksView({ onNavigate, plan }: { onNavigate: (view: View) => void; plan: DailyManagerPlan | null }) {
   const [done, setDone] = useState<string[]>([]);
-  useEffect(() => { try { setDone(JSON.parse(localStorage.getItem('wallet-social-daily-tasks') || '[]')); } catch { setDone([]); } }, []);
+  useEffect(() => {
+    const hydrationTimer = window.setTimeout(() => {
+      try { setDone(JSON.parse(localStorage.getItem('wallet-social-daily-tasks') || '[]')); } catch { setDone([]); }
+    }, 0);
+    return () => window.clearTimeout(hydrationTimer);
+  }, []);
   useEffect(() => { localStorage.setItem('wallet-social-daily-tasks', JSON.stringify(done)); }, [done]);
-  const percent = Math.round((done.length / dailyTaskSeed.length) * 100);
+  const tasks = plan?.tasks.length ? plan.tasks.map((task) => ({ id: task.id, time: task.time, title: task.title, detail: task.instruction, target: task.kind === "publish" ? "content" as View : task.kind === "reply" ? "replies" as View : task.kind === "interact" ? "growth" as View : task.kind === "research" ? "research" as View : "sent" as View, priority: task.priority === "now" ? "الان" : task.priority === "today" ? "امروز" : "اختیاری" })) : dailyTaskSeed;
+  const percent = Math.round((done.filter((id) => tasks.some((task) => task.id === id)).length / tasks.length) * 100);
   return <section className="tasks-view">
-    <div className="tasks-summary panel"><div><span className="eyebrow">چهارشنبه · برنامه اپراتور</span><h2>{done.length === dailyTaskSeed.length ? 'همه کارهای امروز انجام شد' : `${(dailyTaskSeed.length - done.length).toLocaleString('fa-IR')} کار تا پایان برنامه امروز`}</h2><p>هر ردیف دقیقاً می‌گوید چه کاری، در چه زمانی و در کدام بخش انجام شود.</p></div><div className="daily-progress"><strong>{percent.toLocaleString('fa-IR')}٪</strong><span><i style={{width:`${percent}%`}}/></span><small>{done.length.toLocaleString('fa-IR')} از {dailyTaskSeed.length.toLocaleString('fa-IR')} تکمیل‌شده</small></div></div>
-    <div className="task-list">{dailyTaskSeed.map((task, index) => { const checked = done.includes(task.id); return <article className={`panel task-row lift-card ${checked ? 'completed' : ''}`} key={task.id}><button className="task-check" onClick={() => setDone((current) => checked ? current.filter((id) => id !== task.id) : [...current, task.id])} aria-label={checked ? 'بازگرداندن کار' : 'علامت‌گذاری انجام شد'}>{checked ? '✓' : (index + 1).toLocaleString('fa-IR')}</button><time>{task.time}</time><div><span>{task.priority}</span><h3>{task.title}</h3><p>{task.detail}</p></div><button className="btn quiet" onClick={() => onNavigate(task.target)}>رفتن به بخش ←</button></article>; })}</div>
+    <div className="tasks-summary panel"><div><span className="eyebrow">{plan ? "برنامه زنده امروز" : "برنامه موقت اپراتور"}</span><h2>{done.filter((id) => tasks.some((task) => task.id === id)).length === tasks.length ? 'همه کارهای امروز انجام شد' : `${(tasks.length - done.filter((id) => tasks.some((task) => task.id === id)).length).toLocaleString('fa-IR')} کار تا پایان برنامه امروز`}</h2><p>{plan?.todayGoal || "هر ردیف دقیقاً می‌گوید چه کاری، در چه زمانی و در کدام بخش انجام شود."}</p></div><div className="daily-progress"><strong>{percent.toLocaleString('fa-IR')}٪</strong><span><i style={{width:`${percent}%`}}/></span><small>{done.filter((id) => tasks.some((task) => task.id === id)).length.toLocaleString('fa-IR')} از {tasks.length.toLocaleString('fa-IR')} تکمیل‌شده</small></div></div>
+    <div className="task-list">{tasks.map((task, index) => { const checked = done.includes(task.id); return <article className={`panel task-row lift-card ${checked ? 'completed' : ''}`} key={task.id}><button className="task-check" onClick={() => setDone((current) => checked ? current.filter((id) => id !== task.id) : [...current, task.id])} aria-label={checked ? 'بازگرداندن کار' : 'علامت‌گذاری انجام شد'}>{checked ? '✓' : (index + 1).toLocaleString('fa-IR')}</button><time>{task.time}</time><div><span>{task.priority}</span><h3>{task.title}</h3><p>{task.detail}</p></div><button className="btn quiet" onClick={() => onNavigate(task.target)}>رفتن به بخش ←</button></article>; })}</div>
   </section>;
 }
 
@@ -798,17 +865,18 @@ function CreativeView({ onNavigate }: { onNavigate: (view: View) => void }) {
   </section>;
 }
 
-function GrowthView() {
+function GrowthView({ plan }: { plan: DailyManagerPlan | null }) {
   const [copied, setCopied] = useState('');
   const copy = (id:string, value:string) => { void navigator.clipboard.writeText(value); setCopied(id); window.setTimeout(() => setCopied(''), 1800); };
-  const opportunities = [
+  const staticOpportunities = [
     { id:'security', topic:'امنیت کیف‌پول', query:'wallet security private keys on-chain alerts', reason:'تناسب مستقیم با اعتمادسازی محصول', comment:'A useful wallet alert should add context, not fear: what moved, where it went, and whether the pattern is unusual. That makes monitoring actionable without ever needing a private key.' },
     { id:'solana', topic:'رصد تراکنش‌های Solana', query:'Solana wallet monitoring transaction alerts', reason:'فرصت آموزش قابلیت چندشبکه‌ای', comment:'Fast alerts matter, but clarity matters too. Showing confirmation status and transaction context helps users understand what happened instead of reacting to a raw notification.' },
     { id:'whales', topic:'تحلیل فعالیت نهنگ‌ها', query:'on-chain whale wallet tracking analytics', reason:'دسترسی به مخاطب معامله‌گر و پژوهشگر', comment:'Tracking a large transfer is only the first signal. Counterparties, repeated behavior, and token concentration are what turn a movement into something worth investigating.' },
   ];
+  const opportunities = plan?.interactions.length ? plan.interactions.map((item) => ({ id: item.id, topic: item.account, query: item.postUrl, reason: item.reason, comment: item.comment, directUrl: item.postUrl, live: true })) : staticOpportunities.map((item) => ({ ...item, directUrl: `https://x.com/search?q=${encodeURIComponent(item.query)}&src=typed_query&f=live`, live: false }));
   return <section className="growth-view">
     <div className="growth-hero panel"><div><span className="eyebrow">رشد باکیفیت، نه اسپم</span><h2>سه تعامل معنی‌دار بهتر از سی کامنت تکراری است.</h2><p>عامل موضوع و متن را پیشنهاد می‌دهد؛ اپراتور پست واقعی را می‌بیند و فقط پس از اطمینان منتشر می‌کند.</p></div><div className="api-gate"><i>✓</i><div><strong>اعتبار X برای رشد مصرف نمی‌شود</strong><small>برای حفظ ۵ دلار Owned Reads، پیدا کردن پست هدف با لینک جست‌وجوی دستی انجام می‌شود.</small></div></div></div>
-    <div className="growth-layout"><div className="opportunity-list">{opportunities.map((item) => <article className="panel opportunity-card lift-card" key={item.id}><header><div><span className="eyebrow">فرصت تعامل</span><h3>{item.topic}</h3></div><span className="match-score">۹{item.id === 'security' ? '۴' : item.id === 'solana' ? '۰' : '۲'}٪</span></header><div className="target-query"><small>عبارت کشف پست هدف</small><code dir="ltr">{item.query}</code></div><p>{item.reason}</p><blockquote dir="ltr">{item.comment}</blockquote><footer><a className="btn quiet" href={`https://x.com/search?q=${encodeURIComponent(item.query)}&src=typed_query&f=live`} target="_blank" rel="noreferrer">جست‌وجوی دستی در X ↗</a><button className="btn accent" onClick={() => copy(item.id,item.comment)}>{copied === item.id ? '✓ کپی شد' : 'کپی کامنت پیشنهادی'}</button></footer></article>)}</div>
+    <div className="growth-layout"><div className="opportunity-list">{opportunities.map((item) => <article className="panel opportunity-card lift-card" key={item.id}><header><div><span className="eyebrow">{item.live ? "فرصت زنده امروز" : "فرصت تعامل"}</span><h3>{item.topic}</h3></div><span className="match-score">{item.live ? "LIVE" : "۹۲٪"}</span></header><div className="target-query"><small>{item.live ? "لینک پست واقعی در X" : "عبارت کشف پست هدف"}</small><code dir="ltr">{item.query}</code></div><p>{item.reason}</p><blockquote dir="ltr">{item.comment}</blockquote><footer><a className="btn quiet" href={item.directUrl} target="_blank" rel="noreferrer">بازکردن پست در X ↗</a><button className="btn accent" onClick={() => copy(item.id,item.comment)}>{copied === item.id ? '✓ کپی شد' : 'کپی کامنت پیشنهادی'}</button></footer></article>)}</div>
       <aside className="growth-side"><article className="panel guard-card"><span className="eyebrow">گارد ضداسپم</span><h3>قبل از هر تعامل</h3><ul><li><b>ارتباط:</b> پست باید واقعاً درباره موضوع محصول باشد.</li><li><b>اصالت:</b> شباهت با کامنت‌های قبلی کمتر از ۷۲٪.</li><li><b>تعداد:</b> حداکثر ۳ تا ۵ تعامل دستی باکیفیت در روز.</li><li><b>توقف:</b> پاسخ تکراری، لایک خودکار و فالو انبوه ممنوع.</li></ul></article><article className="panel target-accounts"><span className="eyebrow">سبد اکانت هدف</span><h3>چه کسانی ارزش رصد دارند؟</h3>{[['پژوهشگران امنیت وب۳','اعتماد و آموزش'],['تحلیل‌گران داده آن‌چین','اثبات کاربرد'],['اکوسیستم‌های Solana و EVM','کشف مخاطب'],['سازندگان ابزار معامله‌گری','همکاری محصول']].map((item) => <div key={item[0]}><span>◎</span><p><strong>{item[0]}</strong><small>{item[1]}</small></p><b>روزانه</b></div>)}</article></aside></div>
   </section>;
 }
@@ -885,6 +953,18 @@ export default function DashboardClient() {
   const sentPosts = useStoredIds("wallet-social-sent-posts");
   const managedReplies = useStoredCollection<ReplyItem>("wallet-social-reply-items", replies);
   const managedContent = useStoredCollection<ContentItem>("wallet-social-content-items", contentItems);
+  const dailyManager = useDailyManagerPlan();
+  const setManagedContent = managedContent.setItems;
+
+  useEffect(() => {
+    if (!dailyManager.plan) return;
+    const generatedItems: ContentItem[] = dailyManager.plan.posts.map((post) => ({ id: `live-${dailyManager.plan!.date}-${post.id}`, type: "پیشنهاد زنده مدیر هوشمند", title: post.title, body: post.summaryFa, language: post.language, risk: post.risk, time: `امروز · ${post.time}`, source: `${post.sourceUrls.length.toLocaleString("fa-IR")} منبع زنده Firecrawl`, postText: post.copy, imageUrl: post.imageUrl, sourceUrls: post.sourceUrls }));
+    setManagedContent((current) => {
+      const generatedIds = new Set(generatedItems.map((item) => item.id));
+      const previous = current.filter((item) => !item.id.startsWith("live-") && !generatedIds.has(item.id));
+      return [...generatedItems, ...previous];
+    });
+  }, [dailyManager.plan, setManagedContent]);
 
   useEffect(() => {
     const initialView = viewFromPathname(window.location.pathname);
@@ -988,11 +1068,11 @@ export default function DashboardClient() {
         <header className="topbar"><div className="topbar-left"><button className="menu-button" onClick={() => setMobileNav(true)} aria-label="بازکردن منو">☰</button><div className="view-heading" key={view}><div className="title-line"><h1>{viewMeta[view].title}</h1><span className="system-pill"><i/> آماده کار</span></div><p>{viewMeta[view].sub}</p></div></div><div className="topbar-actions"><button className={`btn quiet refresh-button ${transitionPhase !== "idle" ? "spinning" : ""}`} onClick={refreshView}><span aria-hidden="true">↻</span> تازه‌سازی</button><button className="logout-button" onClick={() => void logout()} disabled={loggingOut} aria-label="خروج از داشبورد"><span aria-hidden="true">↪</span><b>{loggingOut ? "در حال خروج" : "خروج"}</b></button></div></header>
         <div className={`content content-stage ${transitionPhase === "leaving" ? "is-leaving" : ""}`} aria-busy={isLoading || transitionPhase !== "idle"}>
           {(isLoading || transitionPhase === "loading") ? <ViewSkeleton /> : <div className="view-enter" key={view}>
-            {view === "overview" && <Overview onNavigate={changeView}/>} 
+            {view === "overview" && <Overview onNavigate={changeView} manager={dailyManager}/>}
             {view === "strategy" && <StrategyView onNavigate={changeView}/>}
-            {view === "tasks" && <TasksView onNavigate={changeView}/>}
+            {view === "tasks" && <TasksView onNavigate={changeView} plan={dailyManager.plan}/>}
             {view === "creative" && <CreativeView onNavigate={changeView}/>}
-            {view === "growth" && <GrowthView/>}
+            {view === "growth" && <GrowthView plan={dailyManager.plan}/>}
             {view === "replies" && <RepliesView replyItems={managedReplies.items} onRepliesChange={managedReplies.setItems} sentIds={sentReplies.ids} onMarkSent={sentReplies.mark}/>}
             {view === "content" && <ContentView content={managedContent.items} onContentChange={managedContent.setItems} sentIds={sentPosts.ids} onMarkSent={sentPosts.mark}/>}
             {view === "sent" && <SentView replyIds={sentReplies.ids} postIds={sentPosts.ids} replyItems={managedReplies.items} content={managedContent.items}/>}

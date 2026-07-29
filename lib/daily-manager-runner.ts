@@ -1,0 +1,24 @@
+import { readDailyPlan, writeDailyPlan } from "@/lib/daily-plan-store";
+import { buildDailyPlan, collectLiveSources, notifyDailyPlan } from "@/lib/social-manager";
+
+export function tehranDate() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tehran",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+export async function runDailyManager(request: Request, force = false) {
+  const date = tehranDate();
+  if (!force) {
+    const cached = await readDailyPlan(date);
+    if (cached) return { plan: cached, cached: true, telegramNotified: false };
+  }
+  const sources = await collectLiveSources(date);
+  const plan = await buildDailyPlan(date, sources);
+  await writeDailyPlan(plan);
+  const telegramNotified = await notifyDailyPlan(request, plan).catch(() => false);
+  return { plan, cached: false, telegramNotified };
+}
