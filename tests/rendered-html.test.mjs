@@ -52,8 +52,9 @@ test("keeps the human publishing and Telegram workflows in the dashboard", async
   assert.match(page, /اعلان‌های تلگرام/);
   assert.match(page, /\/api\/telegram/);
   assert.match(page, /SocialWalletTrackerBot/);
-  assert.match(page, /@WalletTrackerHQ/);
-  assert.match(page, /https:\/\/x\.com\/WalletTrackerHQ/);
+  assert.match(page, /@wallettrackerH/);
+  assert.match(page, /https:\/\/x\.com\/wallettrackerH/);
+  assert.doesNotMatch(page, /@WalletTrackerHQ/);
   assert.match(page, /wallet-social-sent-posts/);
   assert.match(page, /wallet-social-sent-replies/);
   assert.match(page, /wallet-social-content-items/);

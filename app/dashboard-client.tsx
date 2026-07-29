@@ -55,8 +55,8 @@ type TelegramConnection = {
   error?: string;
 };
 
-const X_ACCOUNT_HANDLE = "@WalletTrackerHQ";
-const X_ACCOUNT_URL = "https://x.com/WalletTrackerHQ";
+const X_ACCOUNT_HANDLE = "@wallettrackerH";
+const X_ACCOUNT_URL = "https://x.com/wallettrackerH";
 const SETTINGS_DEFAULTS = { polling: true, firecrawl: true, interval: "120", budget: "10.00", lowConfidence: true, externalClaims: true, importantAccounts: true };
 
 const navGroups = [
