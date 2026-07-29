@@ -646,6 +646,21 @@ p, h1, h2, h3, strong, small, span { overflow-wrap: anywhere; }
   .strategy-hero,.tasks-summary,.creative-hero,.growth-hero { align-items:flex-start; flex-direction:column; padding:20px; }.strategy-score,.daily-progress { width:100%; min-width:0; }.strategy-kpis,.logic-grid,.creative-grid,.growth-side { grid-template-columns:1fr; }.action-panel { grid-column:auto; }.strategy-calendar .panel-head { flex-direction:column; }.week-tabs { width:100%; overflow-x:auto; }.week-tabs button { flex:0 0 auto; }.task-row { grid-template-columns:42px 1fr; gap:10px; }.task-row time { grid-column:2; grid-row:1; }.task-row > div,.task-row > .btn { grid-column:1/-1; }.task-row > .btn { width:100%; }.creative-pipeline { display:grid; grid-template-columns:repeat(5,1fr); }.creative-pipeline div:not(:last-child)::after { display:none; }.creative-pipeline b { font-size:6px; text-align:center; }.content-package footer,.opportunity-card footer { align-items:stretch; flex-direction:column; }.content-package footer > span { margin:0; }.generation-checks { grid-template-columns:1fr; }
 }
 
+/* Phase 3 proactive agent */
+.agent-signals-panel { display: grid; gap: 14px; margin-top: 12px; border-color: rgba(255,116,23,.24); background: linear-gradient(135deg,rgba(255,116,23,.06),rgba(255,255,255,.01)); }
+.agent-signals-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 10px; }
+.signal-card { display: grid; gap: 6px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: rgba(8,8,8,.55); }
+.signal-card strong { color: var(--accent); font-size: 13px; }
+.signal-card span { font-size: 11px; line-height: 1.7; }
+.signal-card small { color: var(--muted); font-size: 8px; line-height: 1.8; }
+.signal-card.whale { border-color: rgba(255,116,23,.28); }
+.signal-card.semi-auto { border-color: rgba(88,255,170,.24); }
+.signal-card.bridge { border-color: rgba(120,180,255,.24); }
+.semi-auto-badge { display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border: 1px solid rgba(88,255,170,.35); border-radius: 999px; background: rgba(88,255,170,.08); color: #8dffb8; font-size: 8px; font-weight: 800; }
+.research-bridge-banner { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; border-color: rgba(120,180,255,.28); background: linear-gradient(120deg,rgba(120,180,255,.08),rgba(255,255,255,.01)); }
+.research-bridge-banner blockquote { margin: 10px 0 0; padding: 10px 12px; border-right: 2px solid rgba(120,180,255,.35); color: var(--text-2); font-size: 11px; line-height: 1.8; }
+.reach-meta.compact { margin-top: 8px; }
+
 /* Secure login */
 .login-page { position: relative; display: grid; min-height: 100dvh; overflow: hidden; place-items: center; padding: 24px; background: #050505; color: var(--text); isolation: isolate; }
 .login-page::before { position: absolute; inset: 0; z-index: -3; background-image: linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.018) 1px, transparent 1px); background-size: 54px 54px; content: ""; mask-image: radial-gradient(circle at 50% 50%, #000 15%, transparent 78%); }

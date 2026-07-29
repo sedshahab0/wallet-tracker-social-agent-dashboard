@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applyReplySafety } from "../lib/reply-policy.ts";
+import { applyReplySafety, isSemiAutoReady } from "../lib/reply-policy.ts";
 
 const green = {
   risk: "green",
@@ -44,4 +44,17 @@ test("a reply without grounding facts cannot remain green", () => {
   const result = applyReplySafety("What does it do?", { ...green, groundingFacts: [] });
   assert.equal(result.risk, "yellow");
   assert.equal(result.needsHumanReview, true);
+});
+
+test("marks grounded green replies with 95+ confidence as semi-auto ready", () => {
+  const ready = {
+    ...green,
+    confidence: 96,
+    risk: "green",
+    needsHumanReview: false,
+  };
+  assert.equal(isSemiAutoReady(ready), true);
+  assert.equal(isSemiAutoReady({ ...ready, confidence: 94 }), false);
+  assert.equal(isSemiAutoReady({ ...ready, needsHumanReview: true }), false);
+  assert.equal(isSemiAutoReady({ ...ready, groundingFacts: [] }), false);
 });

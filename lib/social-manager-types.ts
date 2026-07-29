@@ -21,6 +21,8 @@ export type AccountState = {
   recentPosts: AccountRecentPost[];
   summaryFa: string;
   scrapedAt: string;
+  intelligenceSummaryFa?: string;
+  engagementTrend?: "up" | "flat" | "down" | "unknown";
 };
 
 export type DailyManagerTask = {

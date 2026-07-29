@@ -29,6 +29,7 @@ type ReplyItem = {
   authorId?: string;
   publishVerified?: boolean;
   matchedUrl?: string;
+  semiAutoReady?: boolean;
 };
 type ContentItem = {
   id: string;
@@ -63,6 +64,31 @@ type ResearchItem = {
   sources?: ResearchSource[];
   summary?: string;
   completedAt?: string;
+};
+type ResearchBridgeAction = {
+  topic: string;
+  postCopy: string;
+  postSummaryFa: string;
+  interactions: Array<{ account: string; postUrl: string; comment: string; reasonFa: string }>;
+  sourceUrls: string[];
+  score: number;
+  createdAt: string;
+};
+type WhaleAlert = {
+  id: string;
+  account: string;
+  postUrl: string;
+  tier: "S" | "A";
+  reachScore: number;
+  engagementLabel: string;
+  topic: string;
+  reasonFa: string;
+  detectedAt: string;
+};
+type AgentSignals = {
+  whale: { lastRunAt: string; lastAlertCount: number; lastAlerts: WhaleAlert[] };
+  researchBridge: ResearchBridgeAction | null;
+  semiAutoReplyCount: number;
 };
 type TelegramConnection = {
   configured: boolean;
@@ -227,6 +253,30 @@ function useInteractionRecords(key: string) {
   return { records, upsert, isSent, find };
 }
 
+function useAgentSignals() {
+  const [signals, setSignals] = useState<AgentSignals | null>(null);
+  const load = useCallback(async () => {
+    try {
+      const response = await fetch("/api/manager/signals", { cache: "no-store" });
+      const payload = await response.json() as { ok?: boolean; whale?: AgentSignals["whale"]; researchBridge?: ResearchBridgeAction | null; semiAutoReplyCount?: number };
+      if (!response.ok || !payload.ok || !payload.whale) return;
+      setSignals({
+        whale: payload.whale,
+        researchBridge: payload.researchBridge || null,
+        semiAutoReplyCount: payload.semiAutoReplyCount || 0,
+      });
+    } catch {
+      // The next refresh retries automatically.
+    }
+  }, []);
+  useEffect(() => {
+    const timer = window.setTimeout(() => void load(), 0);
+    const interval = window.setInterval(() => void load(), 180_000);
+    return () => { window.clearTimeout(timer); window.clearInterval(interval); };
+  }, [load]);
+  return { signals, reload: load };
+}
+
 function useStoredCollection<T>(key: string, initialItems: T[]) {
   const [items, setItems] = useState<T[]>(initialItems);
   const [ready, setReady] = useState(false);
@@ -386,6 +436,52 @@ function RiskBadge({ risk }: { risk: Risk }) {
   return <span className={`risk-badge ${risk}`}><i />{label}</span>;
 }
 
+function SemiAutoBadge() {
+  return <span className="semi-auto-badge" title="پاسخ سبز با اطمینان ۹۵٪+ و حقیقت داخلی تأییدشده">⚡ نیمه‌خودکار</span>;
+}
+
+function AgentSignalsPanel({ signals, onNavigate }: { signals: AgentSignals | null; onNavigate: (view: View) => void }) {
+  if (!signals) return null;
+  const { whale, researchBridge, semiAutoReplyCount } = signals;
+  const hasWhale = whale.lastAlerts.length > 0;
+  const hasBridge = Boolean(researchBridge?.postCopy);
+  if (!hasWhale && !hasBridge && !semiAutoReplyCount) return null;
+  return (
+    <article className="panel agent-signals-panel">
+      <div className="panel-head"><div><span className="eyebrow">Agent پیش‌فعال · فاز ۳</span><h3>سیگنال‌های زنده و اقدام‌های آماده</h3></div>{whale.lastRunAt && <small>آخرین رصد: {new Date(whale.lastRunAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran", hour: "2-digit", minute: "2-digit" })}</small>}</div>
+      <div className="agent-signals-grid">
+        {semiAutoReplyCount > 0 && <div className="signal-card semi-auto"><strong>{semiAutoReplyCount.toLocaleString("fa-IR")}</strong><span>پاسخ نیمه‌خودکار</span><small>سبز · اطمینان ۹۵٪+ · تلگرام</small><button className="btn quiet" onClick={() => onNavigate("replies")}>صندوق پاسخ‌ها ←</button></div>}
+        {hasWhale && whale.lastAlerts.slice(0, 2).map((alert) => (
+          <div className="signal-card whale" key={alert.postUrl}>
+            <strong>Tier {alert.tier} · Reach {alert.reachScore}</strong>
+            <span dir="ltr">{alert.account}</span>
+            <small>{alert.topic || alert.reasonFa}</small>
+            <a className="btn quiet" href={alert.postUrl} target="_blank" rel="noreferrer">بازکردن پست ↗</a>
+          </div>
+        ))}
+        {hasBridge && researchBridge && (
+          <div className="signal-card bridge">
+            <strong>پل پژوهش · {researchBridge.score}/100</strong>
+            <span>{researchBridge.topic}</span>
+            <small>{researchBridge.postSummaryFa}</small>
+            <button className="btn quiet" onClick={() => onNavigate("growth")}>اقدام‌های پیشنهادی ←</button>
+          </div>
+        )}
+      </div>
+    </article>
+  );
+}
+
+function ResearchBridgeBanner({ bridge, onNavigate }: { bridge: ResearchBridgeAction | null; onNavigate?: (view: View) => void }) {
+  if (!bridge?.postCopy) return null;
+  return (
+    <article className="panel research-bridge-banner">
+      <div><span className="eyebrow">پل پژوهش → اقدام · Agent فاز ۳</span><h3>{bridge.topic}</h3><p>{bridge.postSummaryFa}</p><blockquote dir="ltr">{bridge.postCopy}</blockquote>{bridge.interactions.length > 0 && <small>{bridge.interactions.length.toLocaleString("fa-IR")} هدف تعامل از همین پژوهش پیشنهاد شد.</small>}</div>
+      {onNavigate && <button className="btn accent" onClick={() => onNavigate("growth")}>مشاهده در برنامه رشد ←</button>}
+    </article>
+  );
+}
+
 function ViewSkeleton() {
   return (
     <div className="view-skeleton" aria-label="در حال بارگذاری" aria-busy="true">
@@ -404,7 +500,7 @@ function ViewSkeleton() {
   );
 }
 
-function Overview({ onNavigate, manager }: { onNavigate: (view: View) => void; manager: ReturnType<typeof useDailyManagerPlan> }) {
+function Overview({ onNavigate, manager, agentSignals }: { onNavigate: (view: View) => void; manager: ReturnType<typeof useDailyManagerPlan>; agentSignals: AgentSignals | null }) {
   const { plan, loading, error, stage, regenerate } = manager;
   return (
     <section className="operator-home">
@@ -417,7 +513,10 @@ function Overview({ onNavigate, manager }: { onNavigate: (view: View) => void; m
 
       {plan && <article className={`publish-decision panel ${plan.publishDecision}`}><span>{plan.publishDecision === "publish" ? "امروز منتشر می‌کنیم" : plan.publishDecision === "light" ? "امروز سبک منتشر می‌کنیم" : "امروز پست تازه نمی‌گذاریم"}</span><strong>{plan.publishReason}</strong></article>}
 
-      {plan?.accountState && <article className="panel account-state-card"><div className="panel-head"><div><span className="eyebrow">وضعیت زنده اکانت رسمی</span><h3 dir="ltr">{plan.accountState.handle}</h3></div><span className="sent-chip">{plan.accountState.stage === "bootstrap" ? "راه‌اندازی" : plan.accountState.stage === "early" ? "ابتدایی" : "فعال"}</span></div><p>{plan.accountState.summaryFa}</p><div className="account-recent-posts">{plan.accountState.recentPosts.length ? plan.accountState.recentPosts.slice(0, 3).map((post) => <a key={post.id} href={post.url} target="_blank" rel="noreferrer"><small dir="ltr">{post.postedAt || post.url}</small><span dir="auto">{post.text}</span></a>) : <div className="empty-state compact"><strong>پست عمومی تازه‌ای دیده نشد.</strong><p>برنامه امروز باید محافظه‌کارانه و معرفی‌محور باشد.</p></div>}</div></article>}
+      {plan?.accountState && <article className="panel account-state-card"><div className="panel-head"><div><span className="eyebrow">وضعیت زنده اکانت رسمی</span><h3 dir="ltr">{plan.accountState.handle}</h3></div><span className="sent-chip">{plan.accountState.stage === "bootstrap" ? "راه‌اندازی" : plan.accountState.stage === "early" ? "ابتدایی" : "فعال"}</span></div><p>{plan.accountState.summaryFa}</p>{plan.accountState.engagementTrend && plan.accountState.engagementTrend !== "unknown" && <div className="reach-meta compact"><span>{plan.accountState.engagementTrend === "up" ? "روند تعامل: رو به بالا" : plan.accountState.engagementTrend === "down" ? "روند تعامل: افت" : "روند تعامل: ثابت"}</span></div>}<div className="account-recent-posts">{plan.accountState.recentPosts.length ? plan.accountState.recentPosts.slice(0, 3).map((post) => <a key={post.id} href={post.url} target="_blank" rel="noreferrer"><small dir="ltr">{post.postedAt || post.url}</small><span dir="auto">{post.text}</span></a>) : <div className="empty-state compact"><strong>پست عمومی تازه‌ای دیده نشد.</strong><p>برنامه امروز باید محافظه‌کارانه و معرفی‌محور باشد.</p></div>}</div></article>}
+
+      <AgentSignalsPanel signals={agentSignals} onNavigate={onNavigate} />
+      {agentSignals?.researchBridge && <ResearchBridgeBanner bridge={agentSignals.researchBridge} onNavigate={onNavigate} />}
 
       {plan && <div className="simple-status panel"><div><i className="status-dot"/><span><strong>وضعیت عمومی اکانت بررسی شد</strong><small>{plan.sources.filter((source) => source.channel === "account").length.toLocaleString("fa-IR")} منبع از پروفایل و پست‌های عمومی اکانت با Firecrawl</small></span></div><div><i className="budget-lock">✓</i><span><strong>دانش واقعی پروژه وارد تصمیم شد</strong><small>{plan.sources.filter((source) => source.channel === "project" || source.channel === "product").length.toLocaleString("fa-IR")} منبع اول‌شخص از مخزن و وب‌سایت محصول</small></span></div><div><i className="telegram-dot">◇</i><span><strong>بازار و گفتگوهای مرتبط رصد شدند</strong><small>{plan.sources.filter((source) => ["x", "news", "competitor"].includes(source.channel)).length.toLocaleString("fa-IR")} منبع تازه از X، خبر و رقبا؛ بدون مصرف اعتبار X API</small></span></div></div>}
 
@@ -517,7 +616,10 @@ function RepliesView({ replyItems, onRepliesChange, sentIds, onMarkSent }: { rep
             <button key={item.id} className={`inbox-item ${reply.id === item.id ? "active" : ""} ${sentIds.includes(item.id) ? "handled" : ""}`} onClick={() => { setSelectedId(item.id); setMoreOpen(false); }}>
               <span className="avatar">{item.avatar}</span>
               <span><strong dir="ltr">{item.handle.startsWith("@") ? item.handle : `@${item.handle}`}</strong><small>{item.original}</small><em>{item.language} · {item.age}</em></span>
-              {sentIds.includes(item.id) ? <span className="sent-chip">{item.publishVerified ? "تأییدشد" : "ارسال‌شده"}</span> : <RiskBadge risk={escalated.ids.includes(item.id) ? "red" : item.risk} />}
+              {sentIds.includes(item.id) ? <span className="sent-chip">{item.publishVerified ? "تأییدشد" : "ارسال‌شده"}</span> : <>
+                {item.semiAutoReady && <SemiAutoBadge />}
+                <RiskBadge risk={escalated.ids.includes(item.id) ? "red" : item.risk} />
+              </>}
             </button>
           ))}
           {visibleReplies.length === 0 && <div className="empty-state compact"><strong>پاسخی پیدا نشد.</strong><p>عبارت جست‌وجو یا فیلتر زبان را تغییر دهید.</p></div>}
@@ -528,7 +630,7 @@ function RepliesView({ replyItems, onRepliesChange, sentIds, onMarkSent }: { rep
         <div className="conversation-motion" key={reply.id}>
         <div className="conversation-head">
               <div className="identity"><span className="avatar large">{reply.avatar}</span><div><strong dir="ltr">{reply.handle.startsWith("@") ? reply.handle : `@${reply.handle}`}</strong><small>{reply.language} · {reply.sentiment} · {reply.age} قبل</small><a className="tweet-deep-link" href={tweetUrl} target="_blank" rel="noreferrer" dir="ltr">{tweetUrl}</a></div></div>
-          <div><RiskBadge risk={escalated.ids.includes(reply.id) ? "red" : reply.risk} /><div className="action-menu-wrap"><button className={`icon-button ${moreOpen ? "active" : ""}`} onClick={() => setMoreOpen((value) => !value)} aria-label="اقدام‌های بیشتر" aria-expanded={moreOpen}>•••</button>{moreOpen && <div className="action-menu"><button onClick={async () => { await navigator.clipboard?.writeText(reply.original); setMoreOpen(false); notify("متن اصلی کاربر کپی شد"); }}>کپی متن کاربر</button><button onClick={async () => { await navigator.clipboard?.writeText(tweetUrl); setMoreOpen(false); notify("لینک کامنت کپی شد"); }}>کپی لینک کامنت</button><button onClick={() => { setMoreOpen(false); window.open(tweetUrl, "_blank", "noopener,noreferrer"); }}>مشاهده کامنت در X ↗</button></div>}</div></div>
+          <div><RiskBadge risk={escalated.ids.includes(reply.id) ? "red" : reply.risk} />{reply.semiAutoReady && <SemiAutoBadge />}<div className="action-menu-wrap"><button className={`icon-button ${moreOpen ? "active" : ""}`} onClick={() => setMoreOpen((value) => !value)} aria-label="اقدام‌های بیشتر" aria-expanded={moreOpen}>•••</button>{moreOpen && <div className="action-menu"><button onClick={async () => { await navigator.clipboard?.writeText(reply.original); setMoreOpen(false); notify("متن اصلی کاربر کپی شد"); }}>کپی متن کاربر</button><button onClick={async () => { await navigator.clipboard?.writeText(tweetUrl); setMoreOpen(false); notify("لینک کامنت کپی شد"); }}>کپی لینک کامنت</button><button onClick={() => { setMoreOpen(false); window.open(tweetUrl, "_blank", "noopener,noreferrer"); }}>مشاهده کامنت در X ↗</button></div>}</div></div>
         </div>
         <div className="original-post">
           <span className="context-label">پاسخ دریافت‌شده</span>
@@ -536,7 +638,7 @@ function RepliesView({ replyItems, onRepliesChange, sentIds, onMarkSent }: { rep
           <div className="translation"><span>ترجمه برای اپراتور</span><p dir="rtl">{reply.translation}</p></div>
         </div>
         <div className="answer-card">
-          <div className="answer-top"><div><span className="eyebrow">پاسخ پیشنهادی · {reply.language}</span><h3>آماده بررسی انسانی</h3></div><span className="confidence">اطمینان {reply.confidence}٪</span></div>
+          <div className="answer-top"><div><span className="eyebrow">پاسخ پیشنهادی · {reply.language}{reply.semiAutoReady ? " · نیمه‌خودکار" : ""}</span><h3>{reply.semiAutoReady ? "آماده ارسال سریع با تأیید انسانی" : "آماده بررسی انسانی"}</h3></div><span className="confidence">اطمینان {reply.confidence}٪</span></div>
           <div className="answer-text" dir="auto">{reply.answer}</div>
           <div className="translation answer-translation"><span>ترجمه پاسخ</span><p dir="rtl">{reply.answerTranslation}</p></div>
           <div className="source-strip"><span>منبع پاسخ</span><b>منشن واقعی اکانت در X</b><b>{reply.liveContextUsed ? "کانتکست عمومی گفتگو با Firecrawl" : "متن مستقیم منشن"}</b><b title={reply.groundingFacts?.join(" · ") || reply.reviewReason || "دانش تأییدشده پروژه"}>{reply.contextRevision ? `دانش پروژه · ${reply.contextRevision.slice(0, 8)}` : "دانش قدیمی · بازتولید لازم"}</b></div>
@@ -734,7 +836,7 @@ function TelegramView() {
   </section>;
 }
 
-function ResearchView({ onGenerate }: { onGenerate: (focus?: string) => Promise<void> }) {
+function ResearchView({ onGenerate, researchBridge }: { onGenerate: (focus?: string) => Promise<void>; researchBridge: ResearchBridgeAction | null }) {
   const [researchItems, setResearchItems] = useState<ResearchItem[]>([]);
   const [researchReady, setResearchReady] = useState(false);
   const [researchOpen, setResearchOpen] = useState(false);
@@ -746,6 +848,7 @@ function ResearchView({ onGenerate }: { onGenerate: (focus?: string) => Promise<
   const [runError, setRunError] = useState("");
   const [completedResult, setCompletedResult] = useState<ResearchItem | null>(null);
   const [telegramNotified, setTelegramNotified] = useState(false);
+  const [latestBridge, setLatestBridge] = useState<ResearchBridgeAction | null>(researchBridge);
   const [toast, setToast] = useState("");
   const running = runState === "running";
   const progressLabels = ["ارسال درخواست امن به Firecrawl", "جست‌وجو و جمع‌آوری منابع زنده", "حذف نتایج تکراری و آماده‌سازی شواهد", "بازسازی برنامه و صف محتوا", "ارسال اعلان پایان کار به تلگرام"];
@@ -765,6 +868,10 @@ function ResearchView({ onGenerate }: { onGenerate: (focus?: string) => Promise<
   useEffect(() => {
     if (researchReady) window.localStorage.setItem("wallet-social-research-results-live-v2", JSON.stringify(researchItems));
   }, [researchItems, researchReady]);
+
+  useEffect(() => {
+    setLatestBridge(researchBridge);
+  }, [researchBridge]);
 
   const openResearch = () => {
     setRunState("idle");
@@ -792,11 +899,12 @@ function ResearchView({ onGenerate }: { onGenerate: (focus?: string) => Promise<
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ topic: topic.trim(), scope: sourceScope }),
       });
-      const data = await response.json() as { ok?: boolean; result?: ResearchItem; telegramNotified?: boolean; error?: string };
+      const data = await response.json() as { ok?: boolean; result?: ResearchItem; telegramNotified?: boolean; researchBridge?: ResearchBridgeAction | null; error?: string };
       if (!response.ok || !data.ok || !data.result) throw new Error(data.error || "اجرای پژوهش ناموفق بود.");
       setResearchItems((current) => [data.result!, ...current.filter((item) => item.id !== data.result!.id)]);
       setCompletedResult(data.result);
       setTelegramNotified(Boolean(data.telegramNotified));
+      if (data.researchBridge) setLatestBridge(data.researchBridge);
       setProgressStep(3);
       await onGenerate(topic.trim());
       setProgressStep(4);
@@ -823,6 +931,7 @@ function ResearchView({ onGenerate }: { onGenerate: (focus?: string) => Promise<
 
   return (
     <section className="research-grid">
+      {latestBridge && <ResearchBridgeBanner bridge={latestBridge} />}
       <article className="panel research-hero"><span className="eyebrow">بررسی انتخابی</span><h2>Firecrawl فقط وقتی اجرا می‌شود که کانتکست ارزش هزینه را داشته باشد.</h2><p>پس از شروع، وضعیت پژوهش مرحله‌به‌مرحله نمایش داده می‌شود؛ نتیجه همراه منابع در همین صفحه می‌ماند و پایان کار در تلگرام اعلام می‌شود.</p><button className="btn accent" onClick={openResearch}>اجرای پژوهش هدفمند</button></article>
       {researchItems.map((item) => <article className="panel research-card" key={item.id}><div className="score">{item.score}</div><div><span>{item.tag}</span><h3>{item.title}</h3><p>{item.meta}</p></div><button className="text-btn" onClick={() => setSelectedEvidence(item)}>بررسی شواهد ←</button></article>)}
       {researchItems.length === 0 && <article className="panel empty-state"><strong>هنوز پژوهش واقعی اجرا نشده است.</strong><p>با «اجرای پژوهش هدفمند» یک موضوع واقعی را برای Firecrawl بفرستید؛ نتیجه و منابع همین‌جا ثبت می‌شوند.</p></article>}
@@ -897,7 +1006,7 @@ function CreativeView({ onNavigate, plan, onGenerate }: { onNavigate: (view: Vie
 }
 
 
-function GrowthView({ plan, interactionRecords }: { plan: DailyManagerPlan | null; interactionRecords: ReturnType<typeof useInteractionRecords> }) {
+function GrowthView({ plan, interactionRecords, agentSignals }: { plan: DailyManagerPlan | null; interactionRecords: ReturnType<typeof useInteractionRecords>; agentSignals: AgentSignals | null }) {
   const [copied, setCopied] = useState('');
   const [toast, setToast] = useState('');
   const [verifyingId, setVerifyingId] = useState('');
@@ -962,7 +1071,8 @@ function GrowthView({ plan, interactionRecords }: { plan: DailyManagerPlan | nul
   };
 
   return <section className="growth-view">
-    <div className="growth-hero panel"><div><span className="eyebrow">رشد باکیفیت، نه اسپم</span><h2>تعامل روی اکانت‌های بزرگ با کامنت متناسب گفتگو.</h2><p>Agent کل گفتگو را scrape می‌کند، کامنت را بازنویسی می‌کند، Reach را امتیاز می‌دهد و پس از ارسال، انتشار را با Firecrawl تأیید می‌کند.</p></div><div className="api-gate"><i>✓</i><div><strong>حلقه کامل Agent · فاز ۲</strong><small>کانتکست کامل + تأیید کامنت + تاریخچه یادگیری برای برنامه‌های بعدی</small></div></div></div>
+    <div className="growth-hero panel"><div><span className="eyebrow">رشد باکیفیت، نه اسپم</span><h2>تعامل روی اکانت‌های بزرگ با کامنت متناسب گفتگو.</h2><p>Agent کل گفتگو را scrape می‌کند، کامنت را بازنویسی می‌کند، Reach را امتیاز می‌دهد، نهنگ‌های Tier S/A را رصد می‌کند و پس از ارسال، انتشار را با Firecrawl تأیید می‌کند.</p></div><div className="api-gate"><i>✓</i><div><strong>Agent پیش‌فعال · فاز ۳</strong><small>رصد نهنگ + پل پژوهش + پاسخ نیمه‌خودکار + هوش اکانت</small></div></div></div>
+    {agentSignals?.researchBridge && <ResearchBridgeBanner bridge={agentSignals.researchBridge} />}
     <div className="growth-layout"><div className="opportunity-list">{opportunities.map((item) => { const sent = interactionRecords.isSent(item.id); const saved = interactionRecords.find(item.id); return <article className={`panel opportunity-card lift-card ${sent ? "handled" : ""}`} key={item.id}><header><div><span className="eyebrow">فرصت رتبه‌بندی‌شده · {item.tier ? `Tier ${item.tier}` : "در حال تحلیل"}</span><h3 dir="ltr">{item.topic.startsWith("@") ? item.topic : `@${item.topic}`}</h3></div><div className={`match-score ${scoreClass(item.reachScore)}`} title={item.scoreReasonFa || "Reach score"}><strong>{item.reachScore ?? "—"}</strong><small>Reach</small></div></header>{(item.engagementLabel || item.followersLabel || item.threadEnriched || item.commentRegenerated) && <div className="reach-meta"><span>{item.followersLabel || "اکانت کریپتو/ولت"}</span>{item.engagementLabel && <span>{item.engagementLabel}</span>}{item.threadEnriched && <span>کانتکست گفتگو ✓</span>}{item.commentRegenerated && <span>بازنویسی Agent ✓</span>}</div>}<div className="target-query"><small>لینک کامل پست برای گذاشتن کامنت</small><a href={item.directUrl} target="_blank" rel="noreferrer" dir="ltr">{item.query}</a></div><p>{item.reason}</p>{item.scoreReasonFa && <div className="modal-hint"><i />{item.scoreReasonFa}</div>}<blockquote dir="ltr">{item.comment}</blockquote><div className="operator-steps compact"><span><b>۱</b> کپی کامنت</span><span><b>۲</b> بازکردن پست</span><span><b>۳</b> تأیید با Firecrawl</span></div><footer><a className="btn quiet" href={item.directUrl} target="_blank" rel="noreferrer">بازکردن پست در X ↗</a><button className="btn quiet" onClick={() => copy(`${item.id}-url`, item.directUrl)}>{copied === `${item.id}-url` ? '✓ لینک کپی شد' : 'کپی لینک پست'}</button><button className="btn accent" onClick={() => copy(item.id,item.comment)}>{copied === item.id ? '✓ کپی شد' : 'کپی کامنت پیشنهادی'}</button><button className={`btn sent-action ${sent ? "done" : ""}`} disabled={sent || verifyingId === item.id} onClick={() => void confirmInteraction(item)}>{sent ? (saved?.verified ? "✓ در X تأیید شد" : "✓ کامنت ثبت شد") : verifyingId === item.id ? "در حال تأیید روی X…" : "من این کامنت را گذاشتم"}</button></footer></article>; })}{opportunities.length === 0 && <article className="panel empty-state"><strong>فرصت تعامل واقعی پیدا نشده است.</strong><p>تا زمانی که مدیر هوشمند یک پست واقعی و مرتبط در X پیدا نکند، پیشنهادی نمایش داده نمی‌شود.</p></article>}</div>
       <aside className="growth-side"><article className="panel guard-card"><span className="eyebrow">گارد ضداسپم</span><h3>قبل از هر تعامل</h3><ul><li><b>Reach:</b> اولویت با امتیاز ۷۰+ و اکانت‌های Tier S/A.</li><li><b>کانتکست:</b> کامنت باید از scrape کامل گفتگو بازنویسی شده باشد.</li><li><b>تاریخچه:</b> Agent تکرار روی همان پست/اکانت را حذف می‌کند.</li><li><b>تعداد:</b> حداکثر ۴ تعامل دستی باکیفیت در روز.</li></ul></article><article className="panel target-accounts"><span className="eyebrow">اکانت‌های رتبه‌بندی‌شده امروز</span><h3>چه کسانی ارزش تعامل دارند؟</h3>{(plan?.interactions || []).map((item) => <div key={item.id}><span>{item.tier === "S" ? "★" : item.tier === "A" ? "◆" : "◎"}</span><p><strong dir="ltr">{item.account}</strong><small>{item.scoreReasonFa || item.reason}</small></p><b>{item.reachScore !== undefined ? `Reach ${item.reachScore}` : item.time}</b></div>)}{!plan?.interactions.length && <div className="empty-state compact"><strong>هدف تأییدشده‌ای نیست.</strong><p>هیچ اکانت نمونه‌ای نمایش داده نمی‌شود.</p></div>}</article>      </aside></div>
     {toast && <div className="toast">✓ {toast}</div>}
@@ -1110,6 +1220,7 @@ export default function DashboardClient() {
   const managedReplies = useStoredCollection<ReplyItem>("wallet-social-reply-items-live-v4", replies);
   const managedContent = useStoredCollection<ContentItem>("wallet-social-content-items-live-v4", contentItems);
   const dailyManager = useDailyManagerPlan();
+  const agentSignalsState = useAgentSignals();
   const setManagedContent = managedContent.setItems;
   const setManagedReplies = managedReplies.setItems;
 
@@ -1294,16 +1405,16 @@ export default function DashboardClient() {
         <header className="topbar"><div className="topbar-left"><button className="menu-button" onClick={() => setMobileNav(true)} aria-label="بازکردن منو">☰</button><div className="view-heading" key={view}><div className="title-line"><h1>{viewMeta[view].title}</h1><span className="system-pill"><i/> آماده کار</span></div><p>{viewMeta[view].sub}</p></div></div><div className="topbar-actions">{lastRefreshAt && <small className="refresh-meta" role="status">آخرین تازه‌سازی {lastRefreshAt}</small>}<button className={`btn quiet refresh-button ${refreshing ? "spinning" : ""}`} onClick={() => void refreshView()} disabled={refreshing}><span aria-hidden="true">↻</span> {refreshing ? "در حال دریافت…" : "تازه‌سازی"}</button><button className="logout-button" onClick={() => void logout()} disabled={loggingOut} aria-label="خروج از داشبورد"><span aria-hidden="true">↪</span><b>{loggingOut ? "در حال خروج" : "خروج"}</b></button></div></header>
         <div className={`content content-stage ${transitionPhase === "leaving" ? "is-leaving" : ""}`} aria-busy={isLoading || transitionPhase !== "idle"}>
           {(isLoading || transitionPhase === "loading") ? <ViewSkeleton /> : <div className="view-enter" key={view}>
-            {view === "overview" && <Overview onNavigate={changeView} manager={dailyManager}/>}
+            {view === "overview" && <Overview onNavigate={changeView} manager={dailyManager} agentSignals={agentSignalsState.signals}/>}
             {view === "strategy" && <StrategyView onNavigate={changeView} plan={dailyManager.plan}/>}
             {view === "tasks" && <TasksView onNavigate={changeView} plan={dailyManager.plan}/>}
             {view === "creative" && <CreativeView onNavigate={changeView} plan={dailyManager.plan} onGenerate={dailyManager.regenerate}/>}
-            {view === "growth" && <GrowthView plan={dailyManager.plan} interactionRecords={interactionRecords}/>}
+            {view === "growth" && <GrowthView plan={dailyManager.plan} interactionRecords={interactionRecords} agentSignals={agentSignalsState.signals}/>}
             {view === "replies" && <RepliesView replyItems={managedReplies.items} onRepliesChange={managedReplies.setItems} sentIds={sentReplies.ids} onMarkSent={sentReplies.mark}/>}
             {view === "content" && <ContentView content={managedContent.items} onContentChange={managedContent.setItems} sentIds={sentPosts.ids} onMarkSent={sentPosts.mark} onUnmarkSent={sentPosts.unmark} onRetryImages={() => void dailyManager.retryImages()}/>}
             {view === "sent" && <SentView replyIds={sentReplies.ids} postIds={sentPosts.ids} replyItems={managedReplies.items} content={managedContent.items} interactions={interactionRecords.records}/>}
             {view === "telegram" && <TelegramView/>}
-            {view === "research" && <ResearchView onGenerate={dailyManager.regenerate}/>}
+            {view === "research" && <ResearchView onGenerate={dailyManager.regenerate} researchBridge={agentSignalsState.signals?.researchBridge || null}/>}
             {view === "budget" && <BudgetView/>}
             {view === "settings" && <SettingsView/>}
           </div>}

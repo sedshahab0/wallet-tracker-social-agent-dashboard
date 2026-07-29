@@ -1,4 +1,5 @@
 import { hasDashboardSession } from "@/lib/auth";
+import { generateResearchBridgeActions } from "@/lib/research-bridge";
 
 type FirecrawlHit = {
   title?: string;
@@ -191,7 +192,18 @@ export async function POST(request: Request) {
       telegramNotified = false;
     }
 
-    return json({ ok: true, result, telegramNotified });
+    let researchBridge = null;
+    try {
+      researchBridge = await generateResearchBridgeActions({
+        topic,
+        score: result.score,
+        sources,
+      });
+    } catch {
+      researchBridge = null;
+    }
+
+    return json({ ok: true, result, telegramNotified, researchBridge });
   } catch (error) {
     const message = error instanceof Error && error.name === "TimeoutError"
       ? "پژوهش بیشتر از زمان مجاز طول کشید؛ دوباره تلاش کنید."

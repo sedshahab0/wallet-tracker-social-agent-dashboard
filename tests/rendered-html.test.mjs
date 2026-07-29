@@ -184,13 +184,19 @@ test("ships the full-service strategy, creative and growth workflows", async () 
   assert.match(page, /هنوز بسته محتوای واقعی ساخته نشده است/);
   assert.doesNotMatch(page, /@carlos_chain|@noor_web3|@chainwatcher|dailyTaskSeed|staticOpportunities|strategyDays/);
   assert.doesNotMatch(page, /رهگیری کیف‌پول‌های سولانا فعال شد|پرسش‌های امنیت کیف‌پول در حال افزایش است|پست جدید آماده انتشار است/);
-  assert.match(page, /حلقه کامل Agent|رتبه‌بندی خودکار/);
+  assert.match(page, /Agent پیش‌فعال · فاز ۳|رتبه‌بندی خودکار/);
   assert.match(page, /reachScore|Reach/);
   assert.match(page, /من این کامنت را گذاشتم/);
   assert.match(page, /wallet-social-interaction-records-live-v1/);
   assert.match(page, /\/api\/manager\/interactions\/history/);
   assert.match(page, /Tier/);
   assert.match(page, /حداکثر ۴ تعامل دستی باکیفیت در روز/);
+  assert.match(page, /Agent پیش‌فعال · فاز ۳/);
+  assert.match(page, /\/api\/manager\/signals/);
+  assert.match(page, /semi-auto-badge|نیمه‌خودکار/);
+  assert.match(page, /research-bridge-banner|پل پژوهش/);
+  assert.match(css, /\.agent-signals-panel/);
+  assert.match(css, /\.semi-auto-badge/);
   assert.match(css, /\.calendar-grid/);
   assert.match(css, /\.creative-pipeline/);
   assert.match(css, /\.opportunity-card/);
@@ -307,7 +313,12 @@ test("builds an evidence-bound daily manager with Firecrawl and xAI", async () =
   assert.match(historyRoute, /appendInteractionRecord/);
   assert.match(verifyRoute, /interaction/);
   assert.match(runner, /readInteractionHistory/);
+  assert.match(runner, /readResearchBridge|researchBridgeForPrompt/);
+  assert.match(runner, /accountIntelligenceContext|accountIntelligenceForPrompt/);
   assert.match(scorer, /regenerateInteractionComment|shouldSkipInteraction/);
+  assert.match(manager, /Pending research-to-action bridge/);
+  assert.match(exampleEnv, /WHALE_WATCHER_STATE_PATH/);
+  assert.match(exampleEnv, /RESEARCH_BRIDGE_STATE_PATH/);
   assert.match(manager, /wallet drainer|onchain monitoring/);
   assert.match(manager, /Recent growth interaction outcomes/);
   assert.doesNotMatch(`${manager}\n${xai}\n${imageRoute}\n${exampleEnv}`, /xai-[A-Za-z0-9_-]{20,}/);
@@ -371,4 +382,34 @@ test("tracks Grok and Firecrawl usage for the manager budget page", async () => 
   assert.match(page, /اعتبار زنده Firecrawl/);
   assert.match(exampleEnv, /XAI_MONTHLY_TOKEN_BUDGET=500000/);
   assert.match(exampleEnv, /FIRECRAWL_MONTHLY_CREDIT_BUDGET=3000/);
+});
+
+test("ships phase 3 proactive agent modules and whale watcher cron", async () => {
+  const [whaleWatcher, whaleRunner, whaleRoute, signalsRoute, researchBridge, researchRoute, replyPolicy, inbox, timer, service, exampleEnv] = await Promise.all([
+    readFile(new URL("../lib/whale-watcher.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/whale-watcher-runner.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/manager/whale-watch/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/manager/signals/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/research-bridge.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/research/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/reply-policy.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/x-inbox.ts", import.meta.url), "utf8"),
+    readFile(new URL("../deploy/wallet-whale-watcher.timer", import.meta.url), "utf8"),
+    readFile(new URL("../deploy/wallet-whale-watcher.service", import.meta.url), "utf8"),
+    readFile(new URL("../.env.example", import.meta.url), "utf8"),
+  ]);
+  assert.match(whaleWatcher, /runWhaleWatcher|WhaleAlert/);
+  assert.match(whaleRunner, /sendTelegramMessage/);
+  assert.match(whaleRoute, /runWhaleWatcherJob/);
+  assert.match(whaleRoute, /SOCIAL_MANAGER_CRON_SECRET/);
+  assert.match(signalsRoute, /readWhaleWatcherState/);
+  assert.match(signalsRoute, /readResearchBridge/);
+  assert.match(signalsRoute, /isSemiAutoReady/);
+  assert.match(researchBridge, /generateResearchBridgeActions/);
+  assert.match(researchRoute, /generateResearchBridgeActions/);
+  assert.match(replyPolicy, /isSemiAutoReady/);
+  assert.match(inbox, /semiAutoReady|notifySemiAutoReplies/);
+  assert.match(timer, /OnUnitActiveSec=3h/);
+  assert.match(service, /\/api\/manager\/whale-watch/);
+  assert.match(exampleEnv, /ACCOUNT_INTELLIGENCE_PATH/);
 });
