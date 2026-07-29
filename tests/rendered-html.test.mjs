@@ -184,11 +184,15 @@ test("ships the full-service strategy, creative and growth workflows", async () 
   assert.match(page, /هنوز بسته محتوای واقعی ساخته نشده است/);
   assert.doesNotMatch(page, /@carlos_chain|@noor_web3|@chainwatcher|dailyTaskSeed|staticOpportunities|strategyDays/);
   assert.doesNotMatch(page, /رهگیری کیف‌پول‌های سولانا فعال شد|پرسش‌های امنیت کیف‌پول در حال افزایش است|پست جدید آماده انتشار است/);
-  assert.match(page, /اعتبار X برای رشد مصرف نمی‌شود/);
+  assert.match(page, /رتبه‌بندی خودکار توسط Agent/);
+  assert.match(page, /reachScore|Reach/);
+  assert.match(page, /Tier/);
   assert.match(page, /حداکثر ۴ تعامل دستی باکیفیت در روز/);
   assert.match(css, /\.calendar-grid/);
   assert.match(css, /\.creative-pipeline/);
   assert.match(css, /\.opportunity-card/);
+  assert.match(css, /\.match-score\.high/);
+  assert.match(css, /\.reach-meta/);
   assert.match(css, /\.lift-card:hover/);
 });
 
@@ -232,7 +236,7 @@ test("opens generated content images in an accessible lightbox", async () => {
 });
 
 test("builds an evidence-bound daily manager with Firecrawl and xAI", async () => {
-  const [manager, firecrawl, xai, accountState, planRoute, cronRoute, imageRoute, proxyRoute, projectKnowledge, generatedContext, page, exampleEnv, timer] = await Promise.all([
+  const [manager, firecrawl, xai, accountState, planRoute, cronRoute, imageRoute, proxyRoute, projectKnowledge, generatedContext, page, exampleEnv, timer, runner, scorer, registry] = await Promise.all([
     readFile(new URL("../lib/social-manager.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/firecrawl.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/xai.ts", import.meta.url), "utf8"),
@@ -246,6 +250,9 @@ test("builds an evidence-bound daily manager with Firecrawl and xAI", async () =
     readFile(new URL("../app/dashboard-client.tsx", import.meta.url), "utf8"),
     readFile(new URL("../.env.example", import.meta.url), "utf8"),
     readFile(new URL("../deploy/wallet-social-manager.timer", import.meta.url), "utf8"),
+    readFile(new URL("../lib/daily-manager-runner.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/interaction-scorer.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/influence-registry.ts", import.meta.url), "utf8"),
   ]);
   assert.match(firecrawl, /api\.firecrawl\.dev\/v2/);
   assert.match(manager, /firecrawlScrape/);
@@ -287,6 +294,10 @@ test("builds an evidence-bound daily manager with Firecrawl and xAI", async () =
   assert.match(exampleEnv, /XAI_REASONING_EFFORT=medium/);
   assert.match(exampleEnv, /SOCIAL_MANAGER_CRON_SECRET=\n/);
   assert.match(timer, /06:15:00 Asia\/Tehran/);
+  assert.match(runner, /enrichPlanInteractions/);
+  assert.match(scorer, /reachScore|scoreInteraction|enrichPlanInteractions/);
+  assert.match(registry, /WhaleAlert|tierFromFollowerCount/);
+  assert.match(manager, /wallet drainer|onchain monitoring/);
   assert.doesNotMatch(`${manager}\n${xai}\n${imageRoute}\n${exampleEnv}`, /xai-[A-Za-z0-9_-]{20,}/);
 });
 

@@ -1,4 +1,5 @@
 import { readDailyPlan, writeDailyPlan } from "@/lib/daily-plan-store";
+import { enrichPlanInteractions } from "@/lib/interaction-scorer";
 import { buildDailyPlan, collectLiveSources, notifyDailyPlan } from "@/lib/social-manager";
 import { PROJECT_CONTEXT_REVISION } from "@/lib/project-knowledge";
 
@@ -20,7 +21,8 @@ export async function runDailyManager(request: Request, force = false, focus = "
     }
   }
   const { sources, accountState } = await collectLiveSources(date, focus);
-  const plan = await buildDailyPlan(date, sources, accountState, focus);
+  const draftPlan = await buildDailyPlan(date, sources, accountState, focus);
+  const plan = await enrichPlanInteractions(draftPlan);
   await writeDailyPlan(plan);
   const telegramNotified = await notifyDailyPlan(request, plan).catch(() => false);
   return { plan, cached: false, telegramNotified };

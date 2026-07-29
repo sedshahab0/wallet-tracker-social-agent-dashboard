@@ -57,6 +57,16 @@ export type DailyManagerInteraction = {
   comment: string;
   language: string;
   risk: ManagerRisk;
+  reachScore?: number;
+  tier?: "S" | "A" | "B" | "C";
+  topicRelevance?: number;
+  accountTierScore?: number;
+  engagementScore?: number;
+  freshnessScore?: number;
+  engagementLabel?: string;
+  followersLabel?: string;
+  scoreReasonFa?: string;
+  threadScraped?: boolean;
 };
 
 export type DailyManagerPlan = {
