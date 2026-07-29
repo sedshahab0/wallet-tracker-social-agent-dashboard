@@ -67,6 +67,10 @@ export type DailyManagerInteraction = {
   followersLabel?: string;
   scoreReasonFa?: string;
   threadScraped?: boolean;
+  threadEnriched?: boolean;
+  commentRegenerated?: boolean;
+  publishVerified?: boolean;
+  matchedUrl?: string;
 };
 
 export type DailyManagerPlan = {

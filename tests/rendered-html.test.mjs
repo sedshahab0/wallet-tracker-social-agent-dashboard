@@ -184,8 +184,11 @@ test("ships the full-service strategy, creative and growth workflows", async () 
   assert.match(page, /هنوز بسته محتوای واقعی ساخته نشده است/);
   assert.doesNotMatch(page, /@carlos_chain|@noor_web3|@chainwatcher|dailyTaskSeed|staticOpportunities|strategyDays/);
   assert.doesNotMatch(page, /رهگیری کیف‌پول‌های سولانا فعال شد|پرسش‌های امنیت کیف‌پول در حال افزایش است|پست جدید آماده انتشار است/);
-  assert.match(page, /رتبه‌بندی خودکار توسط Agent/);
+  assert.match(page, /حلقه کامل Agent|رتبه‌بندی خودکار/);
   assert.match(page, /reachScore|Reach/);
+  assert.match(page, /من این کامنت را گذاشتم/);
+  assert.match(page, /wallet-social-interaction-records-live-v1/);
+  assert.match(page, /\/api\/manager\/interactions\/history/);
   assert.match(page, /Tier/);
   assert.match(page, /حداکثر ۴ تعامل دستی باکیفیت در روز/);
   assert.match(css, /\.calendar-grid/);
@@ -236,7 +239,7 @@ test("opens generated content images in an accessible lightbox", async () => {
 });
 
 test("builds an evidence-bound daily manager with Firecrawl and xAI", async () => {
-  const [manager, firecrawl, xai, accountState, planRoute, cronRoute, imageRoute, proxyRoute, projectKnowledge, generatedContext, page, exampleEnv, timer, runner, scorer, registry] = await Promise.all([
+  const [manager, firecrawl, xai, accountState, planRoute, cronRoute, imageRoute, proxyRoute, projectKnowledge, generatedContext, page, exampleEnv, timer, runner, scorer, registry, historyLib, historyRoute, verifyRoute] = await Promise.all([
     readFile(new URL("../lib/social-manager.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/firecrawl.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/xai.ts", import.meta.url), "utf8"),
@@ -253,6 +256,9 @@ test("builds an evidence-bound daily manager with Firecrawl and xAI", async () =
     readFile(new URL("../lib/daily-manager-runner.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/interaction-scorer.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/influence-registry.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/interaction-history.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/manager/interactions/history/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/x/verify/route.ts", import.meta.url), "utf8"),
   ]);
   assert.match(firecrawl, /api\.firecrawl\.dev\/v2/);
   assert.match(manager, /firecrawlScrape/);
@@ -297,7 +303,13 @@ test("builds an evidence-bound daily manager with Firecrawl and xAI", async () =
   assert.match(runner, /enrichPlanInteractions/);
   assert.match(scorer, /reachScore|scoreInteraction|enrichPlanInteractions/);
   assert.match(registry, /WhaleAlert|tierFromFollowerCount/);
+  assert.match(historyLib, /historySummaryForPrompt|wasPostRecentlyEngaged/);
+  assert.match(historyRoute, /appendInteractionRecord/);
+  assert.match(verifyRoute, /interaction/);
+  assert.match(runner, /readInteractionHistory/);
+  assert.match(scorer, /regenerateInteractionComment|shouldSkipInteraction/);
   assert.match(manager, /wallet drainer|onchain monitoring/);
+  assert.match(manager, /Recent growth interaction outcomes/);
   assert.doesNotMatch(`${manager}\n${xai}\n${imageRoute}\n${exampleEnv}`, /xai-[A-Za-z0-9_-]{20,}/);
 });
 
@@ -330,6 +342,7 @@ test("polls owned X mentions and resolves real Twitter handles via Firecrawl", a
   assert.match(inbox, /sendMessage/);
   assert.match(verifyRoute, /verifyPublication/);
   assert.match(publishVerify, /verifyReplyPublication|searchOwnTimeline/);
+  assert.match(publishVerify, /verifyInteractionPublication/);
   assert.match(page, /\/api\/x\/inbox/);
   assert.match(page, /\/api\/x\/verify/);
   assert.match(page, /tweetUrl/);

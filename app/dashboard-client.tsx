@@ -166,7 +166,7 @@ const replies: ReplyItem[] = [];
 
 const contentItems: ContentItem[] = [];
 
-async function verifyPublication(kind: "post" | "reply", text: string, targetUrl?: string): Promise<PublishProof> {
+async function verifyPublication(kind: "post" | "reply" | "interaction", text: string, targetUrl?: string): Promise<PublishProof> {
   const response = await fetch("/api/x/verify", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -197,6 +197,34 @@ function useStoredIds(key: string) {
   const mark = (id: string) => setIds((current) => current.includes(id) ? current : [...current, id]);
   const unmark = (id: string) => setIds((current) => current.filter((item) => item !== id));
   return { ids, mark, unmark };
+}
+
+type InteractionRecord = {
+  id: string;
+  account: string;
+  postUrl: string;
+  comment: string;
+  verified: boolean;
+  matchedUrl?: string;
+  reachScore?: number;
+  completedAt: string;
+};
+
+function useInteractionRecords(key: string) {
+  const [records, setRecords] = useState<InteractionRecord[]>([]);
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const hydrationTimer = window.setTimeout(() => {
+      try { setRecords(JSON.parse(window.localStorage.getItem(key) || "[]")); } catch { setRecords([]); }
+      setReady(true);
+    }, 0);
+    return () => window.clearTimeout(hydrationTimer);
+  }, [key]);
+  useEffect(() => { if (ready) window.localStorage.setItem(key, JSON.stringify(records)); }, [records, key, ready]);
+  const upsert = (record: InteractionRecord) => setRecords((current) => [...current.filter((item) => item.id !== record.id), record]);
+  const isSent = (id: string) => records.some((item) => item.id === id);
+  const find = (id: string) => records.find((item) => item.id === id);
+  return { records, upsert, isSent, find };
 }
 
 function useStoredCollection<T>(key: string, initialItems: T[]) {
@@ -612,20 +640,22 @@ function ContentView({ content, onContentChange, sentIds, onMarkSent, onUnmarkSe
   );
 }
 
-function SentView({ replyIds, postIds, replyItems, content }: { replyIds: string[]; postIds: string[]; replyItems: ReplyItem[]; content: ContentItem[] }) {
+function SentView({ replyIds, postIds, replyItems, content, interactions }: { replyIds: string[]; postIds: string[]; replyItems: ReplyItem[]; content: ContentItem[]; interactions: InteractionRecord[] }) {
   const records = [
     ...content.filter((item) => postIds.includes(item.id)).map((item) => ({ id: item.id, type: "پست", title: item.title, detail: item.postText, language: item.language, url: item.matchedUrl || X_ACCOUNT_URL, verified: Boolean(item.publishVerified) })),
     ...replyItems.filter((item) => replyIds.includes(item.id)).map((item) => ({ id: item.id, type: "پاسخ", title: `پاسخ به ${item.handle}`, detail: item.answer, language: item.language, url: item.matchedUrl || item.tweetUrl || `https://x.com/i/web/status/${item.id}`, verified: Boolean(item.publishVerified) })),
+    ...interactions.map((item) => ({ id: item.id, type: "تعامل", title: `کامنت روی ${item.account}`, detail: item.comment, language: "English", url: item.matchedUrl || item.postUrl, verified: item.verified })),
   ];
   return <section>
     <div className="history-summary">
       <article className="panel"><span>ثبت‌شده امروز</span><strong>{records.length}</strong><small>توسط میز اپراتور</small></article>
       <article className="panel"><span>پست منتشرشده</span><strong>{postIds.length}</strong><small>دارای تأیید انسانی</small></article>
       <article className="panel"><span>پاسخ ارسال‌شده</span><strong>{replyIds.length}</strong><small>با زبان اصلی کاربر</small></article>
+      <article className="panel"><span>تعامل رشد</span><strong>{interactions.length}</strong><small>کامنت روی پست‌های هدف</small></article>
     </div>
     <article className="panel history-panel">
       <div className="panel-head"><div><span className="eyebrow">گزارش عملیات</span><h3>ارسال‌های تأییدشده اپراتور</h3><p>پس از دکمه «من ارسال کردم»، Firecrawl صفحه عمومی X را بررسی می‌کند تا مطمئن شود متن واقعاً منتشر شده است.</p></div></div>
-      {records.length === 0 ? <div className="empty-state"><strong>هنوز ارسالی ثبت نشده است.</strong><p>پس از انتشار در X، دکمه «من ارسال کردم» را در صف محتوا یا صندوق پاسخ‌ها بزنید.</p></div> : <div className="history-list">{records.map((record) => <div className="history-row" key={record.id}><span className={`history-icon ${record.type === "پست" ? "post" : "reply"}`}>{record.type === "پست" ? "≡" : "↩"}</span><div><strong>{record.title}</strong><p dir="auto">{record.detail}</p><small>{record.language} · {record.verified ? "تأییدشده با Firecrawl" : "ثبت محلی اپراتور"}</small>{record.url && <a className="tweet-deep-link" href={record.url} target="_blank" rel="noreferrer" dir="ltr">{record.url}</a>}</div><span className="sent-chip">{record.verified ? "✓ تأییدشد" : "✓ ثبت‌شده"}</span><button className="btn quiet" onClick={() => window.open(record.url || "https://x.com/", "_blank", "noopener,noreferrer")}>بازکردن در X ↗</button></div>)}</div>}
+      {records.length === 0 ? <div className="empty-state"><strong>هنوز ارسالی ثبت نشده است.</strong><p>پس از انتشار در X، دکمه «من ارسال کردم» را در صف محتوا، صندوق پاسخ‌ها یا برنامه رشد بزنید.</p></div> : <div className="history-list">{records.map((record) => <div className="history-row" key={record.id}><span className={`history-icon ${record.type === "پست" ? "post" : record.type === "تعامل" ? "growth" : "reply"}`}>{record.type === "پست" ? "≡" : record.type === "تعامل" ? "◎" : "↩"}</span><div><strong>{record.title}</strong><p dir="auto">{record.detail}</p><small>{record.language} · {record.verified ? "تأییدشده با Firecrawl" : "ثبت محلی اپراتور"}</small>{record.url && <a className="tweet-deep-link" href={record.url} target="_blank" rel="noreferrer" dir="ltr">{record.url}</a>}</div><span className="sent-chip">{record.verified ? "✓ تأییدشد" : "✓ ثبت‌شده"}</span><button className="btn quiet" onClick={() => window.open(record.url || "https://x.com/", "_blank", "noopener,noreferrer")}>بازکردن در X ↗</button></div>)}</div>}
     </article>
   </section>;
 }
@@ -867,9 +897,12 @@ function CreativeView({ onNavigate, plan, onGenerate }: { onNavigate: (view: Vie
 }
 
 
-function GrowthView({ plan }: { plan: DailyManagerPlan | null }) {
+function GrowthView({ plan, interactionRecords }: { plan: DailyManagerPlan | null; interactionRecords: ReturnType<typeof useInteractionRecords> }) {
   const [copied, setCopied] = useState('');
+  const [toast, setToast] = useState('');
+  const [verifyingId, setVerifyingId] = useState('');
   const copy = (id:string, value:string) => { void navigator.clipboard.writeText(value); setCopied(id); window.setTimeout(() => setCopied(''), 1800); };
+  const notify = (message: string) => { setToast(message); window.setTimeout(() => setToast(''), 2800); };
   const opportunities = plan?.interactions.map((item) => ({
     id: item.id,
     topic: item.account,
@@ -882,12 +915,57 @@ function GrowthView({ plan }: { plan: DailyManagerPlan | null }) {
     engagementLabel: item.engagementLabel,
     followersLabel: item.followersLabel,
     scoreReasonFa: item.scoreReasonFa,
+    threadEnriched: item.threadEnriched,
+    commentRegenerated: item.commentRegenerated,
   })) || [];
   const scoreClass = (score?: number) => score === undefined ? "" : score >= 70 ? "high" : score >= 55 ? "mid" : "low";
+
+  const confirmInteraction = async (item: typeof opportunities[number]) => {
+    setVerifyingId(item.id);
+    try {
+      const proof = await verifyPublication("interaction", item.comment, item.directUrl);
+      if (!proof.verified) {
+        notify(proof.message || "کامنت هنوز در گفتگوی هدف دیده نشد.");
+        return;
+      }
+      const response = await fetch("/api/manager/interactions/history", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          interactionId: item.id,
+          account: item.topic,
+          postUrl: item.directUrl,
+          comment: item.comment,
+          verified: true,
+          matchedUrl: proof.matchedUrl || item.directUrl,
+          reachScore: item.reachScore,
+        }),
+      });
+      const payload = await response.json() as { ok?: boolean; error?: string };
+      if (!response.ok || !payload.ok) throw new Error(payload.error || "ثبت تعامل در تاریخچه Agent ناموفق بود.");
+      interactionRecords.upsert({
+        id: item.id,
+        account: item.topic.startsWith("@") ? item.topic : `@${item.topic}`,
+        postUrl: item.directUrl,
+        comment: item.comment,
+        verified: true,
+        matchedUrl: proof.matchedUrl || item.directUrl,
+        reachScore: item.reachScore,
+        completedAt: new Date().toISOString(),
+      });
+      notify(proof.message || "کامنت تعامل در X تأیید شد.");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "راستی‌آزمایی کامنت ناموفق بود.");
+    } finally {
+      setVerifyingId('');
+    }
+  };
+
   return <section className="growth-view">
-    <div className="growth-hero panel"><div><span className="eyebrow">رشد باکیفیت، نه اسپم</span><h2>تعامل روی اکانت‌های بزرگ و پست‌های پر بازدید در حوزه کریپتو.</h2><p>مدیر هوشمند هر هدف را با امتیاز Reach، سطح اکانت و سیگنال لایک/بازدید رتبه‌بندی می‌کند؛ فقط بهترین فرصت‌ها نمایش داده می‌شوند.</p></div><div className="api-gate"><i>✓</i><div><strong>رتبه‌بندی خودکار توسط Agent</strong><small>Firecrawl پست و اکانت را scrape می‌کند؛ X API فقط برای منشن‌های اکانت خودمان رزرو است.</small></div></div></div>
-    <div className="growth-layout"><div className="opportunity-list">{opportunities.map((item) => <article className="panel opportunity-card lift-card" key={item.id}><header><div><span className="eyebrow">فرصت رتبه‌بندی‌شده · {item.tier ? `Tier ${item.tier}` : "در حال تحلیل"}</span><h3 dir="ltr">{item.topic.startsWith("@") ? item.topic : `@${item.topic}`}</h3></div><div className={`match-score ${scoreClass(item.reachScore)}`} title={item.scoreReasonFa || "Reach score"}><strong>{item.reachScore ?? "—"}</strong><small>Reach</small></div></header>{(item.engagementLabel || item.followersLabel) && <div className="reach-meta"><span>{item.followersLabel || "اکانت کریپتو/ولت"}</span>{item.engagementLabel && <span>{item.engagementLabel}</span>}</div>}<div className="target-query"><small>لینک کامل پست برای گذاشتن کامنت</small><a href={item.directUrl} target="_blank" rel="noreferrer" dir="ltr">{item.query}</a></div><p>{item.reason}</p>{item.scoreReasonFa && <div className="modal-hint"><i />{item.scoreReasonFa}</div>}<blockquote dir="ltr">{item.comment}</blockquote><footer><a className="btn quiet" href={item.directUrl} target="_blank" rel="noreferrer">بازکردن پست در X ↗</a><button className="btn quiet" onClick={() => copy(`${item.id}-url`, item.directUrl)}>{copied === `${item.id}-url` ? '✓ لینک کپی شد' : 'کپی لینک پست'}</button><button className="btn accent" onClick={() => copy(item.id,item.comment)}>{copied === item.id ? '✓ کپی شد' : 'کپی کامنت پیشنهادی'}</button></footer></article>)}{opportunities.length === 0 && <article className="panel empty-state"><strong>فرصت تعامل واقعی پیدا نشده است.</strong><p>تا زمانی که مدیر هوشمند یک پست واقعی و مرتبط در X پیدا نکند، پیشنهادی نمایش داده نمی‌شود.</p></article>}</div>
-      <aside className="growth-side"><article className="panel guard-card"><span className="eyebrow">گارد ضداسپم</span><h3>قبل از هر تعامل</h3><ul><li><b>Reach:</b> اولویت با امتیاز ۷۰+ و اکانت‌های Tier S/A.</li><li><b>ارتباط:</b> پست باید واقعاً درباره ولت/کریپتو باشد.</li><li><b>تعداد:</b> حداکثر ۴ تعامل دستی باکیفیت در روز.</li><li><b>توقف:</b> کامنت تکراری، لایک خودکار و فالو انبوه ممنوع.</li></ul></article><article className="panel target-accounts"><span className="eyebrow">اکانت‌های رتبه‌بندی‌شده امروز</span><h3>چه کسانی ارزش تعامل دارند؟</h3>{(plan?.interactions || []).map((item) => <div key={item.id}><span>{item.tier === "S" ? "★" : item.tier === "A" ? "◆" : "◎"}</span><p><strong dir="ltr">{item.account}</strong><small>{item.scoreReasonFa || item.reason}</small></p><b>{item.reachScore !== undefined ? `Reach ${item.reachScore}` : item.time}</b></div>)}{!plan?.interactions.length && <div className="empty-state compact"><strong>هدف تأییدشده‌ای نیست.</strong><p>هیچ اکانت نمونه‌ای نمایش داده نمی‌شود.</p></div>}</article></aside></div>
+    <div className="growth-hero panel"><div><span className="eyebrow">رشد باکیفیت، نه اسپم</span><h2>تعامل روی اکانت‌های بزرگ با کامنت متناسب گفتگو.</h2><p>Agent کل گفتگو را scrape می‌کند، کامنت را بازنویسی می‌کند، Reach را امتیاز می‌دهد و پس از ارسال، انتشار را با Firecrawl تأیید می‌کند.</p></div><div className="api-gate"><i>✓</i><div><strong>حلقه کامل Agent · فاز ۲</strong><small>کانتکست کامل + تأیید کامنت + تاریخچه یادگیری برای برنامه‌های بعدی</small></div></div></div>
+    <div className="growth-layout"><div className="opportunity-list">{opportunities.map((item) => { const sent = interactionRecords.isSent(item.id); const saved = interactionRecords.find(item.id); return <article className={`panel opportunity-card lift-card ${sent ? "handled" : ""}`} key={item.id}><header><div><span className="eyebrow">فرصت رتبه‌بندی‌شده · {item.tier ? `Tier ${item.tier}` : "در حال تحلیل"}</span><h3 dir="ltr">{item.topic.startsWith("@") ? item.topic : `@${item.topic}`}</h3></div><div className={`match-score ${scoreClass(item.reachScore)}`} title={item.scoreReasonFa || "Reach score"}><strong>{item.reachScore ?? "—"}</strong><small>Reach</small></div></header>{(item.engagementLabel || item.followersLabel || item.threadEnriched || item.commentRegenerated) && <div className="reach-meta"><span>{item.followersLabel || "اکانت کریپتو/ولت"}</span>{item.engagementLabel && <span>{item.engagementLabel}</span>}{item.threadEnriched && <span>کانتکست گفتگو ✓</span>}{item.commentRegenerated && <span>بازنویسی Agent ✓</span>}</div>}<div className="target-query"><small>لینک کامل پست برای گذاشتن کامنت</small><a href={item.directUrl} target="_blank" rel="noreferrer" dir="ltr">{item.query}</a></div><p>{item.reason}</p>{item.scoreReasonFa && <div className="modal-hint"><i />{item.scoreReasonFa}</div>}<blockquote dir="ltr">{item.comment}</blockquote><div className="operator-steps compact"><span><b>۱</b> کپی کامنت</span><span><b>۲</b> بازکردن پست</span><span><b>۳</b> تأیید با Firecrawl</span></div><footer><a className="btn quiet" href={item.directUrl} target="_blank" rel="noreferrer">بازکردن پست در X ↗</a><button className="btn quiet" onClick={() => copy(`${item.id}-url`, item.directUrl)}>{copied === `${item.id}-url` ? '✓ لینک کپی شد' : 'کپی لینک پست'}</button><button className="btn accent" onClick={() => copy(item.id,item.comment)}>{copied === item.id ? '✓ کپی شد' : 'کپی کامنت پیشنهادی'}</button><button className={`btn sent-action ${sent ? "done" : ""}`} disabled={sent || verifyingId === item.id} onClick={() => void confirmInteraction(item)}>{sent ? (saved?.verified ? "✓ در X تأیید شد" : "✓ کامنت ثبت شد") : verifyingId === item.id ? "در حال تأیید روی X…" : "من این کامنت را گذاشتم"}</button></footer></article>; })}{opportunities.length === 0 && <article className="panel empty-state"><strong>فرصت تعامل واقعی پیدا نشده است.</strong><p>تا زمانی که مدیر هوشمند یک پست واقعی و مرتبط در X پیدا نکند، پیشنهادی نمایش داده نمی‌شود.</p></article>}</div>
+      <aside className="growth-side"><article className="panel guard-card"><span className="eyebrow">گارد ضداسپم</span><h3>قبل از هر تعامل</h3><ul><li><b>Reach:</b> اولویت با امتیاز ۷۰+ و اکانت‌های Tier S/A.</li><li><b>کانتکست:</b> کامنت باید از scrape کامل گفتگو بازنویسی شده باشد.</li><li><b>تاریخچه:</b> Agent تکرار روی همان پست/اکانت را حذف می‌کند.</li><li><b>تعداد:</b> حداکثر ۴ تعامل دستی باکیفیت در روز.</li></ul></article><article className="panel target-accounts"><span className="eyebrow">اکانت‌های رتبه‌بندی‌شده امروز</span><h3>چه کسانی ارزش تعامل دارند؟</h3>{(plan?.interactions || []).map((item) => <div key={item.id}><span>{item.tier === "S" ? "★" : item.tier === "A" ? "◆" : "◎"}</span><p><strong dir="ltr">{item.account}</strong><small>{item.scoreReasonFa || item.reason}</small></p><b>{item.reachScore !== undefined ? `Reach ${item.reachScore}` : item.time}</b></div>)}{!plan?.interactions.length && <div className="empty-state compact"><strong>هدف تأییدشده‌ای نیست.</strong><p>هیچ اکانت نمونه‌ای نمایش داده نمی‌شود.</p></div>}</article>      </aside></div>
+    {toast && <div className="toast">✓ {toast}</div>}
   </section>;
 }
 
@@ -1028,6 +1106,7 @@ export default function DashboardClient() {
   const transitionTimers = useRef<number[]>([]);
   const sentReplies = useStoredIds("wallet-social-sent-replies-live-v4");
   const sentPosts = useStoredIds("wallet-social-sent-posts-live-v4");
+  const interactionRecords = useInteractionRecords("wallet-social-interaction-records-live-v1");
   const managedReplies = useStoredCollection<ReplyItem>("wallet-social-reply-items-live-v4", replies);
   const managedContent = useStoredCollection<ContentItem>("wallet-social-content-items-live-v4", contentItems);
   const dailyManager = useDailyManagerPlan();
@@ -1219,10 +1298,10 @@ export default function DashboardClient() {
             {view === "strategy" && <StrategyView onNavigate={changeView} plan={dailyManager.plan}/>}
             {view === "tasks" && <TasksView onNavigate={changeView} plan={dailyManager.plan}/>}
             {view === "creative" && <CreativeView onNavigate={changeView} plan={dailyManager.plan} onGenerate={dailyManager.regenerate}/>}
-            {view === "growth" && <GrowthView plan={dailyManager.plan}/>}
+            {view === "growth" && <GrowthView plan={dailyManager.plan} interactionRecords={interactionRecords}/>}
             {view === "replies" && <RepliesView replyItems={managedReplies.items} onRepliesChange={managedReplies.setItems} sentIds={sentReplies.ids} onMarkSent={sentReplies.mark}/>}
             {view === "content" && <ContentView content={managedContent.items} onContentChange={managedContent.setItems} sentIds={sentPosts.ids} onMarkSent={sentPosts.mark} onUnmarkSent={sentPosts.unmark} onRetryImages={() => void dailyManager.retryImages()}/>}
-            {view === "sent" && <SentView replyIds={sentReplies.ids} postIds={sentPosts.ids} replyItems={managedReplies.items} content={managedContent.items}/>}
+            {view === "sent" && <SentView replyIds={sentReplies.ids} postIds={sentPosts.ids} replyItems={managedReplies.items} content={managedContent.items} interactions={interactionRecords.records}/>}
             {view === "telegram" && <TelegramView/>}
             {view === "research" && <ResearchView onGenerate={dailyManager.regenerate}/>}
             {view === "budget" && <BudgetView/>}

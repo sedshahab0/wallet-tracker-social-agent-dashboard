@@ -4,7 +4,7 @@ import { xAccountUsername } from "@/lib/x-api";
 import { extractStatusUrls, normalizeComparableText, textLooksPublished } from "@/lib/x-thread";
 
 export type PublishVerifyInput = {
-  kind: "post" | "reply";
+  kind: "post" | "reply" | "interaction";
   text: string;
   targetUrl?: string;
 };
@@ -159,6 +159,50 @@ async function verifyReplyPublication(text: string, targetUrl: string): Promise<
   };
 }
 
+async function verifyInteractionPublication(text: string, targetUrl: string): Promise<PublishVerifyResult> {
+  const candidates: MatchCandidate[] = [];
+
+  const threadScrape = await firecrawlScrapeRaw(targetUrl, { waitFor: 2500, maxAge: 60_000 }).catch(() => null);
+  if (threadScrape?.data?.markdown) {
+    candidates.push({
+      blob: threadScrape.data.markdown,
+      links: threadScrape.data.links || [],
+      evidence: "کامنت در گفتگوی هدف دیده شد.",
+      preferUrl: targetUrl,
+    });
+  }
+
+  const direct = matchPublishedInCandidates(text, candidates);
+  if (direct) {
+    return { ...direct, message: "کامنت تعامل در X تأیید شد." };
+  }
+
+  const timelineHits = await searchOwnTimeline(text).catch(() => []);
+  const timelineMatch = matchPublishedInCandidates(
+    text,
+    hitsToCandidates(timelineHits, "کامنت از طریق جست‌وجوی Firecrawl روی اکانت پیدا شد."),
+  );
+  if (timelineMatch) {
+    return { ...timelineMatch, message: "کامنت تعامل در X تأیید شد." };
+  }
+
+  const contextualHits = await searchOwnReplyNearThread(text, targetUrl).catch(() => []);
+  const contextualMatch = matchPublishedInCandidates(
+    text,
+    hitsToCandidates(contextualHits, "کامنت در کنار گفتگوی هدف پیدا شد."),
+  );
+  if (contextualMatch) {
+    return { ...contextualMatch, message: "کامنت تعامل در X تأیید شد." };
+  }
+
+  return {
+    verified: false,
+    matchedUrl: "",
+    evidence: "",
+    message: "کامنت هنوز در گفتگوی هدف دیده نشد؛ چند دقیقه بعد دوباره بررسی کنید.",
+  };
+}
+
 export async function verifyPublication(input: PublishVerifyInput): Promise<PublishVerifyResult> {
   const text = input.text.trim();
   if (text.length < 12) {
@@ -171,6 +215,14 @@ export async function verifyPublication(input: PublishVerifyInput): Promise<Publ
       return { verified: false, matchedUrl: "", evidence: "", message: "لینک گفتگوی هدف برای تأیید پاسخ معتبر نیست." };
     }
     return verifyReplyPublication(text, target);
+  }
+
+  if (input.kind === "interaction") {
+    const target = input.targetUrl?.trim() || "";
+    if (!/^https:\/\/(?:www\.)?x\.com\/[^/]+\/status\/\d+/i.test(target)) {
+      return { verified: false, matchedUrl: "", evidence: "", message: "لینک پست هدف برای تأیید کامنت معتبر نیست." };
+    }
+    return verifyInteractionPublication(text, target);
   }
 
   const profile = await firecrawlScrapeRaw(PRODUCT_PROFILE_URL, { waitFor: 1800, maxAge: 60_000 });

@@ -215,11 +215,17 @@ function evidenceBoundPlan(
   return { ...generated, posts, interactions, signals, tasks };
 }
 
-export async function buildDailyPlan(date: string, sources: LiveSource[], accountState: AccountState, focus = ""): Promise<DailyManagerPlan> {
+export async function buildDailyPlan(
+  date: string,
+  sources: LiveSource[],
+  accountState: AccountState,
+  focus = "",
+  interactionHistoryContext = "",
+): Promise<DailyManagerPlan> {
   const recentPosts = accountState.recentPosts.map((post, index) => `${index + 1}. ${post.postedAt || "unknown time"} · ${post.url}\n${post.text}`).join("\n\n") || "none discoverable";
   const raw = await xaiChatCompletion({
     system: `You are the full-service X brand manager for Wallet Tracker. The complete [project] source is the binding project-truth document and includes an explicit confidence table, network truth table, safety rules, content policy, and interaction policy. Follow it exactly. Produce a safe, evidence-based daily operating plan for a non-expert human operator. All operator instructions and explanations must be Persian. Public posts and comments should normally be natural English unless the target post is another language. Never invent product capabilities, metrics, partnerships, transactions, networks, availability, news, customer stories, or release dates. Treat [project] as audited first-party facts and all other sources as live public context. Every factual post must cite only supplied source URLs. Keep each X post at most 260 characters. Do not recommend mass following, repetitive comments, engagement bait, financial advice, automated posting, or any X API discovery request. Customer-facing posts must lead with user value and clear outcomes; never mention frameworks, repositories, backend architecture, internal providers or implementation details unless the requested topic is explicitly technical. Use the live own-account state to decide cadence: bootstrap = one truthful intro post; early = light educational posts that do not repeat the exact previous post text; active = continue themes without duplicating recent posts. Pause only when even first-party evidence is insufficient or a real safety risk exists. Schedule 1-2 quality posts maximum and 2-4 meaningful interactions. Prefer interaction targets from large, high-visibility crypto/wallet accounts (exchanges, on-chain analytics, wallet security alerts, major ecosystem accounts) when the supplied sources include them. An interaction is valid only when it points to an exact supplied X status URL (https://x.com/{handle}/status/{id}) and adds a concrete insight or useful question before any product mention. The account field must be the real @handle from that URL. Never exploit a security incident for promotion. Every image prompt must be 16:9, premium black/orange Wallet Tracker visual, directly related to the exact post, no logos of other companies and no tiny text.`,
-    user: `Date: ${date}\nRequested editorial focus: ${focus.trim() || "none; choose from evidence"}\n\nOwn X account state:\nhandle: ${accountState.handle}\nstage: ${accountState.stage}\nsummary: ${accountState.summaryFa}\nrecent public posts:\n${recentPosts}\n\nLive sources collected by Firecrawl:\n${sourceContext(sources)}`,
+    user: `Date: ${date}\nRequested editorial focus: ${focus.trim() || "none; choose from evidence"}\n\nRecent growth interaction outcomes (avoid duplicate targets/comments):\n${interactionHistoryContext.trim() || "none recorded"}\n\nOwn X account state:\nhandle: ${accountState.handle}\nstage: ${accountState.stage}\nsummary: ${accountState.summaryFa}\nrecent public posts:\n${recentPosts}\n\nLive sources collected by Firecrawl:\n${sourceContext(sources)}`,
     schemaName: "wallet_tracker_daily_plan",
     schema: managerSchema,
     timeoutMs: 120_000,
