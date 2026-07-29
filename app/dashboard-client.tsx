@@ -104,7 +104,7 @@ const navGroups = [
       { id: "creative" as View, icon: "✦", label: "ساخت محتوای جدید" },
       { id: "telegram" as View, icon: "➤", label: "تنظیم اعلان‌ها" },
       { id: "research" as View, icon: "◇", label: "تحقیق زنده" },
-      { id: "budget" as View, icon: "▥", label: "اعتبار ۵ دلاری X" },
+      { id: "budget" as View, icon: "▥", label: "مصرف API و اعتبار" },
       { id: "settings" as View, icon: "⚙", label: "تنظیمات فنی" },
     ],
   },
@@ -121,7 +121,7 @@ const viewMeta: Record<View, { title: string; sub: string }> = {
   sent: { title: "تاریخچه ارسال", sub: "همه پست‌ها و پاسخ‌هایی که اپراتور انتشار آن‌ها را تأیید کرده است." },
   telegram: { title: "اعلان‌های تلگرام", sub: "هشدارها، لینک‌های مستقیم و قوانین اطلاع‌رسانی گروه اپراتورها" },
   research: { title: "پژوهش زنده", sub: "سیگنال‌های منتخب Firecrawl برای تصمیم‌گیری محتوایی" },
-  budget: { title: "اعتبار X برای خواندن کامنت‌ها", sub: "تمام ۵ دلار فقط برای Owned Reads منشن‌های اکانت اصلی رزرو شده است." },
+  budget: { title: "مصرف API و اعتبار", sub: "X، Grok و Firecrawl — فقط برای مدیر؛ اپراتور نیازی به این صفحه ندارد." },
   settings: { title: "تنظیمات", sub: "سیاست ثابت پایش، تأیید انسانی و محدودیت هزینه را مشاهده کنید." },
 };
 
@@ -404,7 +404,7 @@ function Overview({ onNavigate, manager }: { onNavigate: (view: View) => void; m
         <div><i className="telegram-dot">➤</i><span><strong>تلگرام به اپراتور خبر می‌دهد</strong><small>برای هر کار آماده، لینک مستقیم همین صفحه ارسال می‌شود.</small></span></div>
       </div>
 
-      <details className="manager-shortcuts panel"><summary>ابزارهای مدیر را نشان بده <small>اپراتور معمولاً به این قسمت نیاز ندارد</small></summary><div>{[["strategy","برنامه هفتگی"],["creative","ساخت محتوای جدید"],["budget","کنترل اعتبار X"],["settings","تنظیمات فنی"]].map(([target,label]) => <button className="btn quiet" key={target} onClick={() => onNavigate(target as View)}>{label}</button>)}</div></details>
+      <details className="manager-shortcuts panel"><summary>ابزارهای مدیر را نشان بده <small>اپراتور معمولاً به این قسمت نیاز ندارد</small></summary><div>{[["strategy","برنامه هفتگی"],["creative","ساخت محتوای جدید"],["budget","مصرف API"],["settings","تنظیمات فنی"]].map(([target,label]) => <button className="btn quiet" key={target} onClick={() => onNavigate(target as View)}>{label}</button>)}</div></details>
     </section>
   );
 }
@@ -636,10 +636,6 @@ function TelegramView() {
     ["پاسخ تازه در صندوق", "پس از تولید پاسخ منبع‌دار", true],
     ["بودجه X در ۵۰٪، ۸۰٪ و ۱۰۰٪", "فوری", true],
     ["پایان پژوهش هدفمند", "همراه لینک نتیجه", true],
-    ["پاسخ بدون اقدام بیش از ۱۵ دقیقه", "هنوز پیاده‌سازی نشده", false],
-    ["توقف Poller یا خطای OAuth", "هنوز پیاده‌سازی نشده", false],
-    ["کپی‌شده ولی ثبت‌نشده", "هنوز پیاده‌سازی نشده", false],
-    ["خلاصه روزانه عملکرد", "هنوز پیاده‌سازی نشده", false],
   ] as const;
   const [connection, setConnection] = useState<TelegramConnection | null>(null);
   const [checking, setChecking] = useState(true);
@@ -698,17 +694,12 @@ function TelegramView() {
       <div className="connection-state"><span className={`status-large ${isConnected ? "connected" : "waiting"}`}><i/> {checking ? "در حال بررسی" : isConnected ? "متصل و فعال" : "منتظر شناسایی گروه"}</span><div><span>نام بات</span><strong dir="ltr">{botUsername}</strong></div><div><span>گروه مقصد</span><strong>{groupTitle}</strong></div><button className="btn accent" disabled={checking || sending} onClick={() => void testTelegram()}>{sending ? "در حال ارسال…" : isConnected ? "آزمایش ارسال اعلان" : "شناسایی دوباره گروه"}</button></div>
       {!isConnected && !checking && <div className="telegram-setup"><strong>یک مرحله تا اتصال مانده</strong><p>در گروه تلگرام این دستور را ارسال کنید و سپس «شناسایی دوباره گروه» را بزنید:</p><code dir="ltr">/connect@SocialWalletTrackerBot</code></div>}
       {telegramNotice && <p className={`telegram-notice ${isConnected ? "success" : "warning"}`} role="status">{telegramNotice}</p>}
-      <div className="deep-link-note"><strong>لینک اعلان چگونه کار می‌کند؟</strong><p>اعلان اپراتور را مستقیم به بخش مرتبطِ برنامه، پست، پاسخ یا پژوهش می‌برد؛ سپس متن را بررسی، در X منتشر و ارسال را در داشبورد ثبت می‌کند.</p></div>
-    </article>
-
-    <article className="panel telegram-feed">
-      <div className="panel-head"><div><span className="eyebrow">رویدادهای واقعی</span><h3>اعلان‌های اخیر</h3></div></div>
-      <div className="telegram-messages"><div className="empty-state"><strong>تاریخچه اعلان‌ها در گروه تلگرام است.</strong><p>این داشبورد در حال حاضر فقط ارسال موفق را تأیید می‌کند و برای جلوگیری از نمایش داده ساختگی، پیام‌های قبلی گروه را شبیه‌سازی نمی‌کند.</p></div></div>
+      <div className="deep-link-note"><strong>لینک اعلان چگونه کار می‌کند؟</strong><p>اعلان اپراتور را مستقیم به بخش مرتبطِ برنامه، پست، پاسخ یا پژوهش می‌برد؛ سپس متن را بررسی، در X منتشر و ارسال را در داشبورد ثبت می‌کند. تاریخچه کامل اعلان‌ها در خود گروه تلگرام باقی می‌ماند.</p></div>
     </article>
 
     <article className="panel notification-rules">
       <div className="panel-head"><div><span className="eyebrow">قوانین اعلان</span><h3>چه زمانی گروه مطلع شود؟</h3><p>اعلان‌های تکراری با کلید یکتا حذف می‌شوند تا گروه شلوغ نشود.</p></div></div>
-      <div className="rule-list">{notificationRules.map((rule) => <div className="notification-rule" key={rule[0]}><span className={`switch ${rule[2] ? "on" : ""}`} aria-label={rule[2] ? "پیاده‌سازی‌شده" : "در انتظار پیاده‌سازی"}><i/></span><div><strong>{rule[0]}</strong><small>{rule[1]}</small></div><span>{rule[2] ? "فعال و واقعی" : "برنامه بعدی"}</span></div>)}</div>
+      <div className="rule-list">{notificationRules.map((rule) => <div className="notification-rule" key={rule[0]}><span className="switch on" aria-label="فعال"><i/></span><div><strong>{rule[0]}</strong><small>{rule[1]}</small></div><span>فعال</span></div>)}</div>
     </article>
   </section>;
 }
@@ -889,32 +880,94 @@ function GrowthView({ plan }: { plan: DailyManagerPlan | null }) {
 
 
 function BudgetView() {
-  const [usage, setUsage] = useState<{ resourceReads: number; budgetUsed: number; updatedAt: string } | null>(null);
+  const [xUsage, setXUsage] = useState<{ resourceReads: number; budgetUsed: number; updatedAt: string } | null>(null);
+  const [aiUsage, setAiUsage] = useState<{
+    month: string;
+    updatedAt: string;
+    xai: { chatRequests: number; promptTokens: number; completionTokens: number; totalTokens: number; imageGenerations: number; tokenBudget: number; tokenPercent: number; model: string; imageModel: string };
+    firecrawl: { searches: number; scrapes: number; failures: number; creditsUsedEstimate: number; creditBudget: number; creditPercent: number; live: { remainingCredits?: number; planCredits?: number } | null };
+  } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
   const loadUsage = useCallback(async () => {
     setLoading(true);
+    setError("");
     try {
-      const response = await fetch("/api/x/inbox", { cache: "no-store" });
-      const payload = await response.json() as { ok?: boolean; resourceReads?: number; budgetUsed?: number; updatedAt?: string };
-      if (response.ok && payload.ok) setUsage({ resourceReads: payload.resourceReads || 0, budgetUsed: payload.budgetUsed || 0, updatedAt: payload.updatedAt || "" });
+      const [inboxResponse, aiResponse] = await Promise.all([
+        fetch("/api/x/inbox", { cache: "no-store" }),
+        fetch("/api/manager/usage", { cache: "no-store" }),
+      ]);
+      const inboxPayload = await inboxResponse.json() as { ok?: boolean; resourceReads?: number; budgetUsed?: number; updatedAt?: string; error?: string };
+      const aiPayload = await aiResponse.json() as { ok?: boolean; usage?: typeof aiUsage; error?: string };
+      if (!inboxResponse.ok || !inboxPayload.ok) throw new Error(inboxPayload.error || "دریافت مصرف X ناموفق بود.");
+      if (!aiResponse.ok || !aiPayload.ok || !aiPayload.usage) throw new Error(aiPayload.error || "دریافت مصرف Grok/Firecrawl ناموفق بود.");
+      setXUsage({ resourceReads: inboxPayload.resourceReads || 0, budgetUsed: inboxPayload.budgetUsed || 0, updatedAt: inboxPayload.updatedAt || "" });
+      setAiUsage(aiPayload.usage);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "دریافت مصرف ناموفق بود.");
     } finally {
       setLoading(false);
     }
   }, []);
-  useEffect(() => { const timer = window.setTimeout(() => void loadUsage(), 0); return () => window.clearTimeout(timer); }, [loadUsage]);
-  const budgetUsed = Math.min(5, usage?.budgetUsed || 0);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void loadUsage(), 0);
+    return () => window.clearTimeout(timer);
+  }, [loadUsage]);
+
+  const budgetUsed = Math.min(5, xUsage?.budgetUsed || 0);
   const budgetPercent = Math.min(100, (budgetUsed / 5) * 100);
   const remaining = Math.max(0, 4.99 - budgetUsed);
+  const firecrawlLiveRemaining = aiUsage?.firecrawl.live?.remainingCredits;
+  const firecrawlLivePlan = aiUsage?.firecrawl.live?.planCredits;
+
   return (
-    <section>
-      <div className="budget-hero panel"><div><span className="eyebrow">محافظ هزینه فعال</span><h2>۵ دلار فقط برای خواندن کامنت‌های جدید</h2><p>هیچ جست‌وجو، انتشار پست، تولید محتوا یا درخواست Firecrawl از اعتبار X استفاده نمی‌کند.</p><button className="btn quiet" onClick={() => void loadUsage()} disabled={loading}>{loading ? "در حال دریافت…" : "دریافت مصرف واقعی داشبورد ↻"}</button></div><div className="budget-bar-large reserved"><span style={{width:`${budgetPercent}%`}}/><i className="mark half">هشدار ۲٫۵۰ دلار</i><i className="mark high">هشدار ۴ دلار</i></div></div>
-      <div className="usage-grid">
-        <article className="panel usage-card"><span className="eyebrow">مصرف ثبت‌شده داشبورد</span><strong>{budgetUsed.toFixed(3)} دلار</strong><p>{(usage?.resourceReads || 0).toLocaleString("fa-IR")} منشن جدید پردازش‌شده</p><small>{usage?.updatedAt ? `آخرین ثبت: ${new Date(usage.updatedAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" })}` : "هنوز منشن جدیدی ثبت نشده است"}</small></article>
-        <article className="panel usage-card"><span className="eyebrow">هزینه Owned Read</span><strong>۰٫۰۰۱ دلار</strong><p>برای هر منشن جدید برگشتی</p><small>هزینه بر اساس منبع جدید است، نه تعداد Poll</small></article>
-        <article className="panel usage-card"><span className="eyebrow">مانده تا توقف ایمن</span><strong>{remaining.toFixed(3)} دلار</strong><p>حدود {Math.floor(remaining / 0.001).toLocaleString("fa-IR")} منشن جدید دیگر</p><small>صورتحساب نهایی و رسمی فقط در X Console است</small></article>
+    <section className="budget-layout">
+      <div className="budget-hero panel">
+        <div>
+          <span className="eyebrow">پایش مدیر · {aiUsage?.month || "ماه جاری"}</span>
+          <h2>مصرف واقعی X، Grok و Firecrawl</h2>
+          <p>اعداد X از Poller منشن‌ها می‌آید. Grok و Firecrawl از هر درخواست موفق سمت سرور ثبت می‌شوند؛ اعتبار زنده Firecrawl در صورت دسترسی API نمایش داده می‌شود.</p>
+          <button className="btn quiet" onClick={() => void loadUsage()} disabled={loading}>{loading ? "در حال دریافت…" : "بروزرسانی مصرف ↻"}</button>
+        </div>
       </div>
-      <article className="panel budget-explanation"><strong>این صفحه را چطور بخوانم؟</strong><ol><li>سامانه هر ۲ دقیقه فقط مسیر منشن‌های اکانت خودمان را بررسی می‌کند.</li><li>اگر کامنت جدیدی نباشد، منبع تازه‌ای برای محاسبه هزینه دریافت نمی‌شود.</li><li>شناسه آخرین منشن ذخیره می‌شود تا موارد قدیمی عمداً دوباره درخواست نشوند.</li><li>در ۲٫۵۰ دلار و ۴ دلار به تلگرام هشدار ارسال می‌شود؛ در ۵ دلار پایش متوقف می‌شود.</li></ol></article>
-      <article className="panel alert-policy"><div className="panel-head"><div><span className="eyebrow">محافظ‌های خودکار</span><h3>هشدارهای اعتبار</h3></div><span className="live-pill"><i/> فعال</span></div><div className="policy-row"><span className="policy-level warning">۵۰٪</span><div><strong>هشدار اولیه در ۲٫۵۰ دلار</strong><small>اعلان تلگرام؛ پایش ادامه دارد</small></div><b>فعال</b></div><div className="policy-row"><span className="policy-level critical">۸۰٪</span><div><strong>هشدار مهم در ۴ دلار</strong><small>اعلان فوری به مدیر</small></div><b>فعال</b></div><div className="policy-row"><span className="policy-level stop">ایمن</span><div><strong>توقف در ۴٫۹۹ دلار</strong><small>یک سنت حاشیه امن برای آخرین batch؛ فقط Polling متوقف می‌شود.</small></div><b>محافظت‌شده</b></div></article>
+      {error && <article className="panel budget-error" role="alert"><strong>خطا در دریافت مصرف</strong><p>{error}</p></article>}
+
+      <article className="panel usage-section">
+        <div className="panel-head"><div><span className="eyebrow">X API · Owned Reads</span><h3>۵ دلار فقط برای منشن‌های اکانت خودمان</h3></div><span className="live-pill"><i/> فعال</span></div>
+        <div className="budget-bar-large reserved"><span style={{ width: `${budgetPercent}%` }} /><i className="mark half">۵۰٪</i><i className="mark high">۸۰٪</i></div>
+        <div className="usage-grid">
+          <div className="usage-card compact"><span className="eyebrow">مصرف ثبت‌شده</span><strong>{budgetUsed.toFixed(3)} دلار</strong><p>{(xUsage?.resourceReads || 0).toLocaleString("fa-IR")} منشن جدید</p></div>
+          <div className="usage-card compact"><span className="eyebrow">مانده تا توقف</span><strong>{remaining.toFixed(3)} دلار</strong><p>حدود {Math.floor(remaining / 0.001).toLocaleString("fa-IR")} منشن دیگر</p></div>
+          <div className="usage-card compact"><span className="eyebrow">آخرین ثبت</span><strong>{xUsage?.updatedAt ? new Date(xUsage.updatedAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran", hour: "2-digit", minute: "2-digit" }) : "—"}</strong><p>هر ۲ دقیقه فقط اگر منشن جدید باشد</p></div>
+        </div>
+      </article>
+
+      <article className="panel usage-section">
+        <div className="panel-head"><div><span className="eyebrow">Grok · xAI</span><h3>توکن‌های مدل {aiUsage?.xai.model || "grok-4.5"}</h3></div></div>
+        <div className="budget-bar-large grok"><span style={{ width: `${aiUsage?.xai.tokenPercent || 0}%` }} /></div>
+        <div className="usage-grid">
+          <div className="usage-card compact"><span className="eyebrow">توکن مصرف‌شده</span><strong>{(aiUsage?.xai.totalTokens || 0).toLocaleString("fa-IR")}</strong><p>ورودی {(aiUsage?.xai.promptTokens || 0).toLocaleString("fa-IR")} · خروجی {(aiUsage?.xai.completionTokens || 0).toLocaleString("fa-IR")}</p></div>
+          <div className="usage-card compact"><span className="eyebrow">درخواست چت</span><strong>{(aiUsage?.xai.chatRequests || 0).toLocaleString("fa-IR")}</strong><p>برنامه روز + پیش‌نویس پاسخ</p></div>
+          <div className="usage-card compact"><span className="eyebrow">تصویر ({aiUsage?.xai.imageModel || "grok-imagine"})</span><strong>{(aiUsage?.xai.imageGenerations || 0).toLocaleString("fa-IR")}</strong><p>هر تولید تصویر یک درخواست جدا</p></div>
+          <div className="usage-card compact"><span className="eyebrow">سقف ماهانه (تنظیم سرور)</span><strong>{(aiUsage?.xai.tokenBudget || 0).toLocaleString("fa-IR")}</strong><p>{(aiUsage?.xai.tokenPercent || 0).toLocaleString("fa-IR")}٪ از سقف داخلی</p></div>
+        </div>
+      </article>
+
+      <article className="panel usage-section">
+        <div className="panel-head"><div><span className="eyebrow">Firecrawl</span><h3>جست‌وجو و Scrape</h3></div></div>
+        <div className="budget-bar-large firecrawl"><span style={{ width: `${aiUsage?.firecrawl.creditPercent || 0}%` }} /></div>
+        <div className="usage-grid">
+          <div className="usage-card compact"><span className="eyebrow">جست‌وجو</span><strong>{(aiUsage?.firecrawl.searches || 0).toLocaleString("fa-IR")}</strong><p>تحقیق، برنامه روز، verify</p></div>
+          <div className="usage-card compact"><span className="eyebrow">Scrape</span><strong>{(aiUsage?.firecrawl.scrapes || 0).toLocaleString("fa-IR")}</strong><p>منشن، پروفایل، انتشار</p></div>
+          <div className="usage-card compact"><span className="eyebrow">برآورد مصرف ماه</span><strong>{(aiUsage?.firecrawl.creditsUsedEstimate || 0).toLocaleString("fa-IR")}</strong><p>سقف داخلی {(aiUsage?.firecrawl.creditBudget || 0).toLocaleString("fa-IR")} · {(aiUsage?.firecrawl.creditPercent || 0).toLocaleString("fa-IR")}٪</p></div>
+          <div className="usage-card compact"><span className="eyebrow">اعتبار زنده Firecrawl</span><strong>{typeof firecrawlLiveRemaining === "number" ? firecrawlLiveRemaining.toLocaleString("fa-IR") : "—"}</strong><p>{typeof firecrawlLivePlan === "number" ? `از ${firecrawlLivePlan.toLocaleString("fa-IR")} اعتبار پلن` : "API live balance در دسترس نیست"}</p></div>
+        </div>
+        {(aiUsage?.firecrawl.failures || 0) > 0 && <p className="usage-footnote">{(aiUsage?.firecrawl.failures || 0).toLocaleString("fa-IR")} درخواست Firecrawl ناموفق در این ماه ثبت شده است.</p>}
+      </article>
+
+      <article className="panel budget-explanation"><strong>راهنمای سریع</strong><ol><li>X فقط برای منشن‌های اکانت رسمی مصرف می‌شود؛ رشد و محتوا از Firecrawl تغذیه می‌شوند.</li><li>Grok برای برنامه روز، پاسخ‌های پیشنهادی و تصویر پست به کار می‌رود.</li><li>Firecrawl برای تحقیق، scrape منشن، verify انتشار و کشف پست‌های رشد استفاده می‌شود.</li><li>اعداد Grok/Firecrawl روی سرور جمع می‌شوند؛ صورتحساب رسمی را در پنل xAI و Firecrawl هم چک کنید.</li></ol></article>
     </section>
   );
 }
@@ -940,7 +993,7 @@ function SettingsView() {
   }, [checkXConnection]);
   return <section>
     <div className="settings-grid">
-      <article className="panel settings-card"><div className="panel-head"><div><span className="eyebrow">اتصال به X</span><h3>فقط پایش کامنت‌های خودمان</h3></div><span className="live-pill"><i/> قفل و فعال</span></div><div className="x-account-card"><span className="avatar">WT</span><div><small>اکانت رسمی پروژه</small><strong dir="ltr">{X_ACCOUNT_HANDLE}</strong></div><a href={X_ACCOUNT_URL} target="_blank" rel="noreferrer">مشاهده در X ↗</a></div><div className={`x-connection-status ${xConnection?.connected ? "connected" : xConnection?.needsCredit ? "credit" : "error"}`}><span><i />{xChecking ? "در حال بررسی تنظیمات امن…" : xConnection?.connected ? "کلیدها ثبت شده‌اند و فقط مسیر منشن‌ها مجاز است" : xConnection?.needsCredit ? "اعتبار X API نیاز به شارژ دارد" : xConnection?.error || "تنظیمات X هنوز کامل نشده است"}</span><button type="button" onClick={() => void checkXConnection()} disabled={xChecking}>{xChecking ? "بررسی…" : "بررسی تنظیمات"}</button></div><label>فاصله زمانی پایش<input value="هر ۲ دقیقه" readOnly aria-label="فاصله ثابت پایش"/></label><label>سقف قطعی Owned Reads<div className="input-prefix"><span>$</span><input value="5.00" readOnly aria-label="سقف ثابت پنج دلار"/></div></label><div className="settings-note">این سیاست‌ها عمداً قفل هستند. فقط مسیر <code>GET /2/users/:id/mentions</code> مجاز است و شناسه آخرین منشن برای جلوگیری از خواندن عمدی موارد قدیمی ذخیره می‌شود.</div></article>
+      <article className="panel settings-card"><div className="panel-head"><div><span className="eyebrow">اتصال به X</span><h3>فقط پایش کامنت‌های خودمان</h3></div><span className="live-pill"><i/> قفل و فعال</span></div><div className="x-account-card"><span className="avatar">WT</span><div><small>اکانت رسمی پروژه</small><strong dir="ltr">{X_ACCOUNT_HANDLE}</strong></div><a href={X_ACCOUNT_URL} target="_blank" rel="noreferrer">مشاهده در X ↗</a></div><div className={`x-connection-status ${xConnection?.connected ? "connected" : "error"}`}><span><i />{xChecking ? "در حال بررسی تنظیمات امن…" : xConnection?.connected ? "کلیدها ثبت شده‌اند و فقط مسیر منشن‌ها مجاز است" : xConnection?.error || "تنظیمات X هنوز کامل نشده است"}</span><button type="button" onClick={() => void checkXConnection()} disabled={xChecking}>{xChecking ? "بررسی…" : "بررسی تنظیمات"}</button></div><label>فاصله زمانی پایش<input value="هر ۲ دقیقه" readOnly aria-label="فاصله ثابت پایش"/></label><label>سقف قطعی Owned Reads<div className="input-prefix"><span>$</span><input value="5.00" readOnly aria-label="سقف ثابت پنج دلار"/></div></label><div className="settings-note">این سیاست‌ها عمداً قفل هستند. فقط مسیر <code>GET /2/users/:id/mentions</code> مجاز است و شناسه آخرین منشن برای جلوگیری از خواندن عمدی موارد قدیمی ذخیره می‌شود.</div></article>
       <article className="panel settings-card"><div className="panel-head"><div><span className="eyebrow">قوانین اجباری کانتکست</span><h3>دانش پروژه + Firecrawl</h3></div><span className="live-pill"><i/> فعال</span></div><label className="check-row"><input type="checkbox" checked readOnly/><span><strong>ارجاع پاسخ‌های کم‌اطمینان</strong><small>اطمینان کمتر از ۸۲٪ هرگز سبز نمی‌شود</small></span></label><label className="check-row"><input type="checkbox" checked readOnly/><span><strong>بررسی لینک‌ها و ادعاهای خارجی</strong><small>کانتکست عمومی روز با Firecrawl؛ حقیقت محصول از فایل پروژه</small></span></label><label className="check-row"><input type="checkbox" checked readOnly/><span><strong>ممنوعیت ادعای بدون منبع</strong><small>شبکه، قابلیت، عدد، همکاری و زمان عرضه باید سند داشته باشد</small></span></label><div className="settings-note">این گزینه‌ها نمایشی یا قابل خاموش‌کردن نیستند؛ مستقیماً در منطق تولید پاسخ و برنامه روز اعمال می‌شوند.</div></article>
     </div>
     <div className="settings-savebar"><div><strong>سیاست عملیاتی امن</strong><span>تغییر این محدودیت‌ها نیازمند تغییر و بازبینی کد است؛ اپراتور نمی‌تواند تصادفی آن‌ها را خاموش کند.</span></div><span className="sent-chip">✓ اعمال‌شده در موتور</span></div>
@@ -950,7 +1003,8 @@ function SettingsView() {
 export default function DashboardClient() {
   const [view, setView] = useState<View>("overview");
   const [targetView, setTargetView] = useState<View>("overview");
-  const [seconds, setSeconds] = useState(78);
+  const [pollSecondsLeft, setPollSecondsLeft] = useState(120);
+  const nextPollAtRef = useRef(Date.now() + 120_000);
   const [mobileNav, setMobileNav] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -985,6 +1039,8 @@ export default function DashboardClient() {
       const locallyEdited = current.find((candidate) => candidate.id === item.id);
       return locallyEdited ? { ...item, answer: locallyEdited.answer, answerTranslation: locallyEdited.answerTranslation } : item;
     }));
+    nextPollAtRef.current = Date.now() + 120_000;
+    setPollSecondsLeft(120);
     return payload.replies?.length || 0;
   }, [setManagedReplies]);
 
@@ -1052,13 +1108,15 @@ export default function DashboardClient() {
       ];
     };
 
-    const timer = window.setInterval(() => setSeconds((value) => value <= 0 ? 119 : value - 1), 1000);
+    const pollTimer = window.setInterval(() => {
+      setPollSecondsLeft(Math.max(0, Math.ceil((nextPollAtRef.current - Date.now()) / 1000)));
+    }, 1000);
     const loadingTimer = window.setTimeout(() => setIsLoading(false), 950);
     window.addEventListener("popstate", handlePopState);
     return () => {
       window.removeEventListener("popstate", handlePopState);
       window.clearTimeout(routeInitTimer);
-      window.clearInterval(timer);
+      window.clearInterval(pollTimer);
       window.clearTimeout(loadingTimer);
       transitionTimers.current.forEach((item) => window.clearTimeout(item));
     };
@@ -1101,7 +1159,8 @@ export default function DashboardClient() {
         syncInbox(),
         new Promise((resolve) => window.setTimeout(resolve, 520)),
       ]);
-      setSeconds(119);
+      nextPollAtRef.current = Date.now() + 120_000;
+      setPollSecondsLeft(120);
       setLastRefreshAt(new Date().toLocaleTimeString("fa-IR", { timeZone: "Asia/Tehran", hour: "2-digit", minute: "2-digit", second: "2-digit" }));
       setRefreshNotice(`داده‌های زنده تازه شد · ${Number(replyCount).toLocaleString("fa-IR")} پاسخ در صندوق`);
     } catch (reason) {
@@ -1113,7 +1172,7 @@ export default function DashboardClient() {
       window.setTimeout(() => setRefreshNotice(""), 6000);
     }
   };
-  const time = `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+  const time = `${String(Math.floor(pollSecondsLeft / 60)).padStart(2, "0")}:${String(pollSecondsLeft % 60).padStart(2, "0")}`;
   const logout = async () => {
     if (loggingOut) return;
     setLoggingOut(true);
@@ -1130,7 +1189,7 @@ export default function DashboardClient() {
         <div className="brand"><div className="brand-mark" aria-hidden="true"><strong>WT</strong></div><div><strong>والت سوشال</strong><small>مرکز مدیریت شبکه اجتماعی</small></div></div>
         <nav className="navigation">
           {navGroups.map((group) => {
-            const links = group.items.map((item) => <button key={item.id} className={`nav-link ${targetView === item.id ? "active" : ""} ${transitionPhase !== "idle" && targetView === item.id ? "pending" : ""}`} onClick={() => changeView(item.id)}><span className="nav-icon">{item.icon}</span><span>{item.label}</span>{item.badge && <b>{item.badge}</b>}</button>);
+            const links = group.items.map((item) => <button key={item.id} className={`nav-link ${targetView === item.id ? "active" : ""} ${transitionPhase !== "idle" && targetView === item.id ? "pending" : ""}`} onClick={() => changeView(item.id)}><span className="nav-icon">{item.icon}</span><span>{item.label}</span></button>);
             return "collapsible" in group && group.collapsible ? <details className="nav-group manager-nav" key={group.label}><summary>{group.label}<span>⌄</span></summary>{links}</details> : <div className="nav-group" key={group.label}><div className="nav-label">{group.label}</div>{links}</div>;
           })}
         </nav>
@@ -1160,7 +1219,7 @@ export default function DashboardClient() {
       </main>
       {refreshNotice && <div className="toast" role="status" aria-live="polite">{refreshNotice}</div>}
       <nav className="mobile-bottom-nav" aria-label="دسترسی سریع موبایل">
-        {[{ id: "overview" as View, icon: "⌂", label: "امروز" }, { id: "content" as View, icon: "۱", label: "پست" }, { id: "replies" as View, icon: "۲", label: "پاسخ" }, { id: "tasks" as View, icon: "✓", label: "کارها" }].map((item) => <button key={item.id} className={`${targetView === item.id ? "active" : ""} ${transitionPhase !== "idle" && targetView === item.id ? "pending" : ""}`} onClick={() => changeView(item.id)}><span>{item.icon}</span><small>{item.label}</small></button>)}
+        {[{ id: "overview" as View, icon: "⌂", label: "امروز" }, { id: "content" as View, icon: "۱", label: "پست" }, { id: "replies" as View, icon: "۲", label: "پاسخ" }, { id: "growth" as View, icon: "۳", label: "رشد" }, { id: "tasks" as View, icon: "✓", label: "کارها" }].map((item) => <button key={item.id} className={`${targetView === item.id ? "active" : ""} ${transitionPhase !== "idle" && targetView === item.id ? "pending" : ""}`} onClick={() => changeView(item.id)}><span>{item.icon}</span><small>{item.label}</small></button>)}
       </nav>
     </div>
   );

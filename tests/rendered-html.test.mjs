@@ -204,11 +204,11 @@ test("keeps the operator flow simple and reserves X credit for owned mentions", 
   assert.match(page, /ابزارهای مدیر · اپراتور نیاز ندارد/);
   assert.match(page, /پاسخ‌های آماده[\s\S]*برنامه رشد[\s\S]*لیست کار امروز/);
   assert.doesNotMatch(page, /ساخت محتوای جدید[\s\S]*برنامه رشد[\s\S]*تنظیم اعلان‌ها/);
-  assert.match(page, /۵ دلار فقط برای خواندن کامنت‌های جدید/);
-  assert.match(page, /۰٫۰۰۱ دلار/);
-  assert.match(page, /هشدار اولیه در ۲٫۵۰ دلار/);
-  assert.match(page, /هشدار مهم در ۴ دلار/);
-  assert.match(page, /توقف در ۴٫۹۹ دلار/);
+  assert.match(page, /مصرف API و اعتبار/);
+  assert.match(page, /\/api\/manager\/usage/);
+  assert.match(page, /Grok · xAI/);
+  assert.match(page, /Firecrawl/);
+  assert.match(page, /Owned Reads/);
   assert.match(statusRoute, /must never spend X credits/);
   assert.doesNotMatch(statusRoute, /resolveXAccount|xGet/);
   assert.match(mentionsRoute, /xAccountId/);
@@ -264,7 +264,8 @@ test("builds an evidence-bound daily manager with Firecrawl and xAI", async () =
   assert.match(projectKnowledge, /PROJECT_CONTEXT_MARKDOWN/);
   assert.match(generatedContext, /Transaction alerts/);
   assert.match(generatedContext, /Never ask for or accept a seed phrase/);
-  assert.match(xai, /api\.x\.ai\/v1\/chat\/completions/);
+  assert.match(xai, /recordXaiChatUsage/);
+  assert.match(xai, /usage\?\.prompt_tokens/);
   assert.match(xai, /grok-4\.5/);
   assert.match(xai, /reasoning_effort/);
   assert.match(xai, /medium/);
@@ -275,7 +276,7 @@ test("builds an evidence-bound daily manager with Firecrawl and xAI", async () =
   assert.match(cronRoute, /timingSafeEqual/);
   assert.match(cronRoute, /SOCIAL_MANAGER_CRON_SECRET/);
   assert.match(imageRoute, /api\.x\.ai\/v1\/images\/generations/);
-  assert.match(imageRoute, /grok-imagine-image/);
+  assert.match(imageRoute, /recordXaiImageUsage/);
   assert.match(imageRoute, /data:\$\{mimeType\};base64/);
   assert.match(page, /مدیر هوشمند روزانه · داده زنده/);
   assert.match(page, /Firecrawl در حال بررسی X|وضعیت زنده اکانت رسمی/);
@@ -320,6 +321,28 @@ test("polls owned X mentions and resolves real Twitter handles via Firecrawl", a
   assert.match(page, /\/api\/x\/verify/);
   assert.match(page, /tweetUrl/);
   assert.match(page, /آیدی توییتر|dir="ltr"/);
-  assert.match(page, /120_000/);
+  assert.match(page, /nextPollAtRef/);
+  assert.match(page, /pollSecondsLeft/);
   assert.match(timer, /OnUnitActiveSec=2min/);
+});
+
+test("tracks Grok and Firecrawl usage for the manager budget page", async () => {
+  const [usageTracker, usageRoute, firecrawl, page, exampleEnv] = await Promise.all([
+    readFile(new URL("../lib/usage-tracker.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/manager/usage/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/firecrawl.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard-client.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../.env.example", import.meta.url), "utf8"),
+  ]);
+  assert.match(usageTracker, /recordXaiChatUsage/);
+  assert.match(usageTracker, /recordFirecrawlUsage/);
+  assert.match(usageTracker, /fetchFirecrawlLiveCredits/);
+  assert.match(usageRoute, /hasDashboardSession/);
+  assert.match(usageRoute, /getUsageSummary/);
+  assert.match(firecrawl, /recordFirecrawlUsage/);
+  assert.match(page, /\/api\/manager\/usage/);
+  assert.match(page, /توکن مصرف‌شده/);
+  assert.match(page, /اعتبار زنده Firecrawl/);
+  assert.match(exampleEnv, /XAI_MONTHLY_TOKEN_BUDGET=500000/);
+  assert.match(exampleEnv, /FIRECRAWL_MONTHLY_CREDIT_BUDGET=3000/);
 });

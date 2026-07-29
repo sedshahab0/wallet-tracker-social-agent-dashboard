@@ -1,5 +1,8 @@
+import { recordXaiChatUsage } from "@/lib/usage-tracker";
+
 type ChatPayload = {
   choices?: Array<{ message?: { content?: string } }>;
+  usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
   error?: { message?: string };
 };
 
@@ -43,5 +46,10 @@ export async function xaiChatCompletion(options: {
   if (!response.ok) throw new Error(payload.error?.message || `xAI error (${response.status})`);
   const content = payload.choices?.[0]?.message?.content;
   if (!content) throw new Error("xAI خروجی معتبری برنگرداند.");
+  await recordXaiChatUsage({
+    promptTokens: payload.usage?.prompt_tokens,
+    completionTokens: payload.usage?.completion_tokens,
+    totalTokens: payload.usage?.total_tokens,
+  });
   return content;
 }
