@@ -10,8 +10,9 @@ export const VERIFIED_PROJECT_SOURCE: LiveSource = {
   url: "urn:wallet-tracker:verified-repositories",
   channel: "project",
   description: [
-    "Wallet Tracker is a NestJS application for tracking cryptocurrency wallets.",
+    "Wallet Tracker helps people track cryptocurrency wallets using public blockchain activity.",
     "Implemented product capabilities documented in the repository include tracking wallets, real-time notifications for new transactions via WebSockets, favorite-wallet management, and wallet search history.",
+    "The backend is implemented with NestJS, but implementation technologies are internal context and should not appear in customer-facing brand introductions unless the topic is explicitly technical.",
     "The product uses public blockchain activity for monitoring; never claim investment performance, custody, partnerships, unsupported networks, or unreleased analytics.",
   ].join(" "),
 };
