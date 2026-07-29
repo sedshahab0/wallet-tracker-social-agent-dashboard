@@ -1,3 +1,4 @@
+import { buildAccountIntelligence } from "@/lib/account-intelligence";
 import { cleanFirecrawlText, firecrawlRequest, firecrawlScrapeRaw } from "@/lib/firecrawl";
 import { PRODUCT_PROFILE_URL } from "@/lib/project-knowledge";
 import type { AccountState, LiveSource } from "@/lib/social-manager-types";
@@ -45,13 +46,16 @@ export async function collectOwnAccountState(): Promise<{ state: AccountState; s
       ? `اکانت رسمی در مرحله ابتدایی است و ${enriched.length.toLocaleString("fa-IR")} پست عمومی اخیر دارد.`
       : `اکانت رسمی فعال است؛ ${enriched.length.toLocaleString("fa-IR")} پست اخیر برای تصمیم‌گیری روزانه خوانده شد.`;
 
+  const intelligence = await buildAccountIntelligence(markdown, enriched);
   const state: AccountState = {
     handle,
     stage,
     profileUrl: PRODUCT_PROFILE_URL,
     recentPosts: enriched,
-    summaryFa,
+    summaryFa: `${summaryFa} · ${intelligence.summaryFa}`,
     scrapedAt: new Date().toISOString(),
+    intelligenceSummaryFa: intelligence.summaryFa,
+    engagementTrend: intelligence.engagementTrend,
   };
 
   const sources: LiveSource[] = [

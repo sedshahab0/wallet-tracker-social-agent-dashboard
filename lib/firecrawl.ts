@@ -1,3 +1,5 @@
+import { recordFirecrawlUsage } from "@/lib/usage-tracker";
+
 export type FirecrawlHit = {
   title?: string;
   url?: string;
@@ -46,8 +48,10 @@ export async function firecrawlRequest(operation: "search" | "scrape", body: Rec
   });
   const payload = (await response.json().catch(() => ({}))) as FirecrawlPayload;
   if (!response.ok || payload.success === false) {
+    await recordFirecrawlUsage(operation, false);
     throw new Error(payload.error || `Firecrawl ${operation} error (${response.status})`);
   }
+  await recordFirecrawlUsage(operation, true);
   return payload;
 }
 

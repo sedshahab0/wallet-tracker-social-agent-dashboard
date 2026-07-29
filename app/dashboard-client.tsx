@@ -29,6 +29,7 @@ type ReplyItem = {
   authorId?: string;
   publishVerified?: boolean;
   matchedUrl?: string;
+  semiAutoReady?: boolean;
 };
 type ContentItem = {
   id: string;
@@ -63,6 +64,31 @@ type ResearchItem = {
   sources?: ResearchSource[];
   summary?: string;
   completedAt?: string;
+};
+type ResearchBridgeAction = {
+  topic: string;
+  postCopy: string;
+  postSummaryFa: string;
+  interactions: Array<{ account: string; postUrl: string; comment: string; reasonFa: string }>;
+  sourceUrls: string[];
+  score: number;
+  createdAt: string;
+};
+type WhaleAlert = {
+  id: string;
+  account: string;
+  postUrl: string;
+  tier: "S" | "A";
+  reachScore: number;
+  engagementLabel: string;
+  topic: string;
+  reasonFa: string;
+  detectedAt: string;
+};
+type AgentSignals = {
+  whale: { lastRunAt: string; lastAlertCount: number; lastAlerts: WhaleAlert[] };
+  researchBridge: ResearchBridgeAction | null;
+  semiAutoReplyCount: number;
 };
 type TelegramConnection = {
   configured: boolean;
@@ -104,7 +130,7 @@ const navGroups = [
       { id: "creative" as View, icon: "✦", label: "ساخت محتوای جدید" },
       { id: "telegram" as View, icon: "➤", label: "تنظیم اعلان‌ها" },
       { id: "research" as View, icon: "◇", label: "تحقیق زنده" },
-      { id: "budget" as View, icon: "▥", label: "اعتبار ۵ دلاری X" },
+      { id: "budget" as View, icon: "▥", label: "مصرف API و اعتبار" },
       { id: "settings" as View, icon: "⚙", label: "تنظیمات فنی" },
     ],
   },
@@ -121,7 +147,7 @@ const viewMeta: Record<View, { title: string; sub: string }> = {
   sent: { title: "تاریخچه ارسال", sub: "همه پست‌ها و پاسخ‌هایی که اپراتور انتشار آن‌ها را تأیید کرده است." },
   telegram: { title: "اعلان‌های تلگرام", sub: "هشدارها، لینک‌های مستقیم و قوانین اطلاع‌رسانی گروه اپراتورها" },
   research: { title: "پژوهش زنده", sub: "سیگنال‌های منتخب Firecrawl برای تصمیم‌گیری محتوایی" },
-  budget: { title: "اعتبار X برای خواندن کامنت‌ها", sub: "تمام ۵ دلار فقط برای Owned Reads منشن‌های اکانت اصلی رزرو شده است." },
+  budget: { title: "مصرف API و اعتبار", sub: "X، Grok و Firecrawl — فقط برای مدیر؛ اپراتور نیازی به این صفحه ندارد." },
   settings: { title: "تنظیمات", sub: "سیاست ثابت پایش، تأیید انسانی و محدودیت هزینه را مشاهده کنید." },
 };
 
@@ -166,7 +192,7 @@ const replies: ReplyItem[] = [];
 
 const contentItems: ContentItem[] = [];
 
-async function verifyPublication(kind: "post" | "reply", text: string, targetUrl?: string): Promise<PublishProof> {
+async function verifyPublication(kind: "post" | "reply" | "interaction", text: string, targetUrl?: string): Promise<PublishProof> {
   const response = await fetch("/api/x/verify", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -183,6 +209,38 @@ function contentFingerprint(text: string) {
   return Math.abs(hash).toString(36).slice(0, 8);
 }
 
+type CachedPostImage = { imageUrl: string; promptKey: string };
+
+function postImageCacheKey(post: { id: string; title: string; copy: string; imagePrompt: string }) {
+  return contentFingerprint(`${post.id}\n${post.title}\n${post.copy}\n${post.imagePrompt}`);
+}
+
+function readPostImageCache(date: string): Record<string, CachedPostImage> {
+  try {
+    const raw = window.localStorage.getItem(`wallet-social-manager-images-v2-${date}`);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, CachedPostImage | string>;
+    const next: Record<string, CachedPostImage> = {};
+    for (const [id, value] of Object.entries(parsed)) {
+      if (typeof value === "string" && value.startsWith("data:")) next[id] = { imageUrl: value, promptKey: "" };
+      else if (value && typeof value === "object" && typeof value.imageUrl === "string" && typeof value.promptKey === "string") next[id] = value;
+    }
+    return next;
+  } catch {
+    return {};
+  }
+}
+
+function writePostImageCache(date: string, stored: Record<string, CachedPostImage>) {
+  try {
+    window.localStorage.setItem(`wallet-social-manager-images-v2-${date}`, JSON.stringify(stored));
+    // Drop the legacy id-only cache so regenerated posts never reuse yesterday's lookalike p1 image.
+    window.localStorage.removeItem(`wallet-social-manager-images-${date}`);
+  } catch {
+    // The in-memory image remains usable if browser storage is full.
+  }
+}
+
 function useStoredIds(key: string) {
   const [ids, setIds] = useState<string[]>([]);
   const [ready, setReady] = useState(false);
@@ -197,6 +255,58 @@ function useStoredIds(key: string) {
   const mark = (id: string) => setIds((current) => current.includes(id) ? current : [...current, id]);
   const unmark = (id: string) => setIds((current) => current.filter((item) => item !== id));
   return { ids, mark, unmark };
+}
+
+type InteractionRecord = {
+  id: string;
+  account: string;
+  postUrl: string;
+  comment: string;
+  verified: boolean;
+  matchedUrl?: string;
+  reachScore?: number;
+  completedAt: string;
+};
+
+function useInteractionRecords(key: string) {
+  const [records, setRecords] = useState<InteractionRecord[]>([]);
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const hydrationTimer = window.setTimeout(() => {
+      try { setRecords(JSON.parse(window.localStorage.getItem(key) || "[]")); } catch { setRecords([]); }
+      setReady(true);
+    }, 0);
+    return () => window.clearTimeout(hydrationTimer);
+  }, [key]);
+  useEffect(() => { if (ready) window.localStorage.setItem(key, JSON.stringify(records)); }, [records, key, ready]);
+  const upsert = (record: InteractionRecord) => setRecords((current) => [...current.filter((item) => item.id !== record.id), record]);
+  const isSent = (id: string) => records.some((item) => item.id === id);
+  const find = (id: string) => records.find((item) => item.id === id);
+  return { records, upsert, isSent, find };
+}
+
+function useAgentSignals() {
+  const [signals, setSignals] = useState<AgentSignals | null>(null);
+  const load = useCallback(async () => {
+    try {
+      const response = await fetch("/api/manager/signals", { cache: "no-store" });
+      const payload = await response.json() as { ok?: boolean; whale?: AgentSignals["whale"]; researchBridge?: ResearchBridgeAction | null; semiAutoReplyCount?: number };
+      if (!response.ok || !payload.ok || !payload.whale) return;
+      setSignals({
+        whale: payload.whale,
+        researchBridge: payload.researchBridge || null,
+        semiAutoReplyCount: payload.semiAutoReplyCount || 0,
+      });
+    } catch {
+      // The next refresh retries automatically.
+    }
+  }, []);
+  useEffect(() => {
+    const timer = window.setTimeout(() => void load(), 0);
+    const interval = window.setInterval(() => void load(), 180_000);
+    return () => { window.clearTimeout(timer); window.clearInterval(interval); };
+  }, [load]);
+  return { signals, reload: load };
 }
 
 function useStoredCollection<T>(key: string, initialItems: T[]) {
@@ -227,57 +337,162 @@ function useDailyManagerPlan() {
   const [stage, setStage] = useState("در حال بررسی برنامه ذخیره‌شده امروز…");
   const [imageErrors, setImageErrors] = useState<Record<string, string>>({});
   const imageRequests = useRef(new Set<string>());
+  const planRef = useRef<DailyManagerPlan | null>(null);
+
+  useEffect(() => {
+    planRef.current = plan;
+  }, [plan]);
 
   const generateImages = useCallback(async (dailyPlan: DailyManagerPlan, force = false) => {
-    const storageKey = `wallet-social-manager-images-${dailyPlan.date}`;
-    let stored: Record<string, string> = {};
-    try { stored = JSON.parse(localStorage.getItem(storageKey) || "{}"); } catch { stored = {}; }
-    if (Object.keys(stored).length) setPlan((current) => current ? { ...current, posts: current.posts.map((post) => ({ ...post, imageUrl: stored[post.id] || post.imageUrl })) } : current);
+    const stored = readPostImageCache(dailyPlan.date);
+    const matchedUrls: Record<string, string> = {};
     for (const post of dailyPlan.posts) {
-      if ((!force && stored[post.id]) || imageRequests.current.has(post.id)) continue;
+      const promptKey = postImageCacheKey(post);
+      const cached = stored[post.id];
+      if (!force && cached?.promptKey === promptKey && cached.imageUrl) matchedUrls[post.id] = cached.imageUrl;
+    }
+    if (Object.keys(matchedUrls).length) {
+      setPlan((current) => current
+        ? { ...current, posts: current.posts.map((post) => ({ ...post, imageUrl: matchedUrls[post.id] || post.imageUrl })) }
+        : current);
+    }
+    for (const post of dailyPlan.posts) {
+      const promptKey = postImageCacheKey(post);
+      const requestKey = `${post.id}:${promptKey}`;
+      if ((!force && matchedUrls[post.id]) || imageRequests.current.has(requestKey)) continue;
       if (force) delete stored[post.id];
-      imageRequests.current.add(post.id);
+      imageRequests.current.add(requestKey);
       try {
         setImageErrors((current) => { const next = { ...current }; delete next[post.id]; return next; });
         setStage(`در حال ساخت تصویر اختصاصی «${post.title}»…`);
         const response = await fetch("/api/manager/image", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ prompt: post.imagePrompt }) });
         const payload = await response.json() as { ok?: boolean; imageUrl?: string; error?: string };
         if (!response.ok || !payload.ok || !payload.imageUrl) throw new Error(payload.error || `تولید تصویر ناموفق بود (${response.status}).`);
-        stored[post.id] = payload.imageUrl;
-        setPlan((current) => current ? { ...current, posts: current.posts.map((item) => item.id === post.id ? { ...item, imageUrl: payload.imageUrl } : item) } : current);
-        try { localStorage.setItem(storageKey, JSON.stringify(stored)); } catch { /* The in-memory image remains usable if browser storage is full. */ }
+        // Ignore stale responses if the plan regenerated with a new prompt for the same post id (p1).
+        const stillCurrent = planRef.current?.posts.some((item) => item.id === post.id && postImageCacheKey(item) === promptKey);
+        if (!stillCurrent) continue;
+        stored[post.id] = { imageUrl: payload.imageUrl, promptKey };
+        matchedUrls[post.id] = payload.imageUrl;
+        setPlan((current) => current
+          ? {
+              ...current,
+              posts: current.posts.map((item) => (
+                item.id === post.id && postImageCacheKey(item) === promptKey
+                  ? { ...item, imageUrl: payload.imageUrl }
+                  : item
+              )),
+            }
+          : current);
+        writePostImageCache(dailyPlan.date, stored);
       } catch (reason) {
         const message = reason instanceof Error ? reason.message : "تولید تصویر ناموفق بود.";
-        setImageErrors((current) => ({ ...current, [post.id]: message }));
+        const stillCurrent = planRef.current?.posts.some((item) => item.id === post.id && postImageCacheKey(item) === promptKey);
+        if (stillCurrent) setImageErrors((current) => ({ ...current, [post.id]: message }));
       } finally {
-        imageRequests.current.delete(post.id);
+        imageRequests.current.delete(requestKey);
       }
     }
-    setStage("برنامه زنده امروز آماده اجراست");
+    if (planRef.current?.generatedAt === dailyPlan.generatedAt) setStage("برنامه زنده امروز آماده اجراست");
   }, []);
+
+  const readPlanPayload = useCallback(async (response: Response) => {
+    const raw = await response.text();
+    if (!raw.trim()) {
+      throw new Error(response.status === 499 || response.status === 408 || response.status >= 500
+        ? "اتصال هنگام ساخت برنامه قطع شد. در حال بررسی نتیجه روی سرور…"
+        : "پاسخ خالی از سرور دریافت شد.");
+    }
+    try {
+      return JSON.parse(raw) as { ok?: boolean; plan?: DailyManagerPlan; error?: string; missing?: boolean };
+    } catch {
+      throw new Error("پاسخ سرور قابل خواندن نبود.");
+    }
+  }, []);
+
+  const tryReadCachedPlan = useCallback(async (options: { newerThan?: string } = {}) => {
+    try {
+      const response = await fetch("/api/manager/daily-plan", { cache: "no-store" });
+      if (!response.ok) return null;
+      const payload = await readPlanPayload(response);
+      if (!payload.ok || !payload.plan) return null;
+      if (options.newerThan && !(Date.parse(payload.plan.generatedAt) > Date.parse(options.newerThan))) return null;
+      return payload.plan;
+    } catch {
+      return null;
+    }
+  }, [readPlanPayload]);
+
+  const recoverPlan = useCallback(async (options: { newerThan?: string; attempts?: number } = {}) => {
+    const attempts = options.attempts ?? 12;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      await new Promise((resolve) => window.setTimeout(resolve, attempt === 0 ? 1200 : 2500));
+      const plan = await tryReadCachedPlan(options);
+      if (plan) return plan;
+    }
+    return null;
+  }, [tryReadCachedPlan]);
 
   const load = useCallback(async (force = false, focus = "") => {
     setLoading(true);
     setError("");
+    const previousGeneratedAt = planRef.current?.generatedAt;
     setStage(force ? "در حال جمع‌آوری دوباره داده‌های زنده X و وب…" : "در حال دریافت برنامه هوشمند امروز…");
     try {
       let response = await fetch("/api/manager/daily-plan", { cache: "no-store" });
       if (response.status === 404 || force) {
         setStage("Firecrawl در حال بررسی X، اخبار و منابع محصول است…");
-        response = await fetch("/api/manager/daily-plan", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ force, focus }) });
+        // Mobile Safari often drops long POSTs (nginx 499) while the server still
+        // finishes. Poll GET in parallel so a completed plan is recovered.
+        let postSettled = false;
+        const postPromise = fetch("/api/manager/daily-plan", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ force, focus }) })
+          .then(async (postResponse) => {
+            const payload = await readPlanPayload(postResponse);
+            if (!postResponse.ok || !payload.ok || !payload.plan) throw new Error(payload.error || "برنامه امروز دریافت نشد.");
+            return payload.plan;
+          })
+          .finally(() => { postSettled = true; });
+
+        while (!postSettled) {
+          await new Promise((resolve) => window.setTimeout(resolve, 2500));
+          if (postSettled) break;
+          const recovered = await tryReadCachedPlan(previousGeneratedAt ? { newerThan: previousGeneratedAt } : {});
+          if (recovered) {
+            setPlan(recovered);
+            setStage("برنامه زنده آماده شد؛ تصاویر در حال تکمیل‌اند…");
+            void generateImages(recovered);
+            void postPromise.catch(() => undefined);
+            return;
+          }
+        }
+
+        const planFromPost = await postPromise;
+        setPlan(planFromPost);
+        setStage("برنامه زنده آماده شد؛ تصاویر در حال تکمیل‌اند…");
+        void generateImages(planFromPost);
+        return;
       }
-      const payload = await response.json() as { ok?: boolean; plan?: DailyManagerPlan; error?: string };
+      const payload = await readPlanPayload(response);
       if (!response.ok || !payload.ok || !payload.plan) throw new Error(payload.error || "برنامه امروز دریافت نشد.");
       setPlan(payload.plan);
       setStage("برنامه زنده آماده شد؛ تصاویر در حال تکمیل‌اند…");
       void generateImages(payload.plan);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "دریافت برنامه زنده ناموفق بود.");
-      setStage("برنامه زنده در دسترس نیست");
+      setStage(force ? "اتصال قطع شد؛ در حال بازیابی برنامه از سرور…" : "در حال بازیابی برنامه ذخیره‌شده…");
+      const recovered = await recoverPlan(force && previousGeneratedAt ? { newerThan: previousGeneratedAt, attempts: 16 } : { attempts: 8 });
+      if (recovered) {
+        setPlan(recovered);
+        setError("");
+        setStage("برنامه زنده آماده شد؛ تصاویر در حال تکمیل‌اند…");
+        void generateImages(recovered);
+        return;
+      }
+      const message = reason instanceof Error ? reason.message : "دریافت برنامه زنده ناموفق بود.";
+      setError(message);
+      setStage(planRef.current ? "بازسازی کامل نشد؛ برنامه قبلی هنوز قابل استفاده است" : "برنامه زنده در دسترس نیست");
     } finally {
       setLoading(false);
     }
-  }, [generateImages]);
+  }, [generateImages, readPlanPayload, recoverPlan, tryReadCachedPlan]);
 
   useEffect(() => { const timer = window.setTimeout(() => void load(false), 0); return () => window.clearTimeout(timer); }, [load]);
   return {
@@ -358,6 +573,52 @@ function RiskBadge({ risk }: { risk: Risk }) {
   return <span className={`risk-badge ${risk}`}><i />{label}</span>;
 }
 
+function SemiAutoBadge() {
+  return <span className="semi-auto-badge" title="پاسخ سبز با اطمینان ۹۵٪+ و حقیقت داخلی تأییدشده">⚡ نیمه‌خودکار</span>;
+}
+
+function AgentSignalsPanel({ signals, onNavigate }: { signals: AgentSignals | null; onNavigate: (view: View) => void }) {
+  if (!signals) return null;
+  const { whale, researchBridge, semiAutoReplyCount } = signals;
+  const hasWhale = whale.lastAlerts.length > 0;
+  const hasBridge = Boolean(researchBridge?.postCopy);
+  if (!hasWhale && !hasBridge && !semiAutoReplyCount) return null;
+  return (
+    <article className="panel agent-signals-panel">
+      <div className="panel-head"><div><span className="eyebrow">Agent پیش‌فعال · فاز ۳</span><h3>سیگنال‌های زنده و اقدام‌های آماده</h3></div>{whale.lastRunAt && <small>آخرین رصد: {new Date(whale.lastRunAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran", hour: "2-digit", minute: "2-digit" })}</small>}</div>
+      <div className="agent-signals-grid">
+        {semiAutoReplyCount > 0 && <div className="signal-card semi-auto"><strong>{semiAutoReplyCount.toLocaleString("fa-IR")}</strong><span>پاسخ نیمه‌خودکار</span><small>سبز · اطمینان ۹۵٪+ · تلگرام</small><button className="btn quiet" onClick={() => onNavigate("replies")}>صندوق پاسخ‌ها ←</button></div>}
+        {hasWhale && whale.lastAlerts.slice(0, 2).map((alert) => (
+          <div className="signal-card whale" key={alert.postUrl}>
+            <strong>Tier {alert.tier} · Reach {alert.reachScore}</strong>
+            <span dir="ltr">{alert.account}</span>
+            <small>{alert.topic || alert.reasonFa}</small>
+            <a className="btn quiet" href={alert.postUrl} target="_blank" rel="noreferrer">بازکردن پست ↗</a>
+          </div>
+        ))}
+        {hasBridge && researchBridge && (
+          <div className="signal-card bridge">
+            <strong>پل پژوهش · {researchBridge.score}/100</strong>
+            <span>{researchBridge.topic}</span>
+            <small>{researchBridge.postSummaryFa}</small>
+            <button className="btn quiet" onClick={() => onNavigate("growth")}>اقدام‌های پیشنهادی ←</button>
+          </div>
+        )}
+      </div>
+    </article>
+  );
+}
+
+function ResearchBridgeBanner({ bridge, onNavigate }: { bridge: ResearchBridgeAction | null; onNavigate?: (view: View) => void }) {
+  if (!bridge?.postCopy) return null;
+  return (
+    <article className="panel research-bridge-banner">
+      <div><span className="eyebrow">پل پژوهش → اقدام · Agent فاز ۳</span><h3>{bridge.topic}</h3><p>{bridge.postSummaryFa}</p><blockquote dir="ltr">{bridge.postCopy}</blockquote>{bridge.interactions.length > 0 && <small>{bridge.interactions.length.toLocaleString("fa-IR")} هدف تعامل از همین پژوهش پیشنهاد شد.</small>}</div>
+      {onNavigate && <button className="btn accent" onClick={() => onNavigate("growth")}>مشاهده در برنامه رشد ←</button>}
+    </article>
+  );
+}
+
 function ViewSkeleton() {
   return (
     <div className="view-skeleton" aria-label="در حال بارگذاری" aria-busy="true">
@@ -376,7 +637,61 @@ function ViewSkeleton() {
   );
 }
 
-function Overview({ onNavigate, manager }: { onNavigate: (view: View) => void; manager: ReturnType<typeof useDailyManagerPlan> }) {
+const USAGE_CACHE_KEY = "wallet-social-usage-cache-v1";
+
+type XUsageSnapshot = { resourceReads: number; budgetUsed: number; updatedAt: string };
+type AiUsageSnapshot = {
+  month: string;
+  updatedAt: string;
+  xai: { chatRequests: number; promptTokens: number; completionTokens: number; totalTokens: number; imageGenerations: number; tokenBudget: number; tokensRemaining?: number; tokenPercent: number; model: string; imageModel: string };
+  firecrawl: { searches: number; scrapes: number; failures: number; creditsUsedEstimate: number; creditBudget: number; creditsRemainingEstimate?: number; creditPercent: number; live: { remainingCredits?: number; planCredits?: number } | null };
+};
+
+function readUsageCache(): { xUsage: XUsageSnapshot; aiUsage: AiUsageSnapshot } | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(USAGE_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { xUsage?: XUsageSnapshot; aiUsage?: AiUsageSnapshot };
+    if (!parsed.xUsage || !parsed.aiUsage) return null;
+    return { xUsage: parsed.xUsage, aiUsage: parsed.aiUsage };
+  } catch {
+    return null;
+  }
+}
+
+function writeUsageCache(xUsage: XUsageSnapshot, aiUsage: AiUsageSnapshot) {
+  try {
+    window.sessionStorage.setItem(USAGE_CACHE_KEY, JSON.stringify({ xUsage, aiUsage }));
+  } catch {
+    // Ignore quota errors; live data still renders.
+  }
+}
+
+function BudgetViewSkeleton() {
+  return (
+    <section className="budget-layout budget-skeleton" aria-label="در حال دریافت مصرف API" aria-busy="true">
+      <div className="skeleton skeleton-panel budget-hero-skeleton"><i className="short" /><i className="medium" /><i className="short" /></div>
+      {[1, 2, 3].map((section) => (
+        <article className="panel usage-section budget-section-skeleton" key={section}>
+          <div className="skeleton skeleton-line short" />
+          <div className="skeleton budget-bar-skeleton" />
+          <div className="usage-grid">
+            {[1, 2, 3, 4].map((card) => (
+              <div className="usage-card compact skeleton-card" key={card}>
+                <i className="short" />
+                <i className="number" />
+                <i className="medium" />
+              </div>
+            ))}
+          </div>
+        </article>
+      ))}
+    </section>
+  );
+}
+
+function Overview({ onNavigate, manager, agentSignals }: { onNavigate: (view: View) => void; manager: ReturnType<typeof useDailyManagerPlan>; agentSignals: AgentSignals | null }) {
   const { plan, loading, error, stage, regenerate } = manager;
   return (
     <section className="operator-home">
@@ -385,11 +700,14 @@ function Overview({ onNavigate, manager }: { onNavigate: (view: View) => void; m
         <div className="today-clock"><span>{plan ? "هدف امروز" : "وضعیت"}</span><strong>{plan?.publishDecision === "pause" ? "توقف انتشار" : plan ? `${plan.tasks.length.toLocaleString("fa-IR")} کار` : "در حال تحلیل"}</strong><small>{plan?.todayGoal || stage}</small></div>
       </div>
 
-      <div className={`manager-live-strip panel ${error ? "has-error" : ""}`}><div><i className="status-dot"/><span><strong>{stage}</strong><small>{plan ? `آخرین تحلیل: ${new Date(plan.generatedAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" })} · ${plan.sources.length.toLocaleString("fa-IR")} منبع زنده · دانش پروژه ${plan.contextRevision.slice(0, 8)}` : error || "این فرایند در اولین ورود هر روز خودکار اجرا می‌شود."}</small></span></div><button className="btn quiet" disabled={loading} onClick={() => void regenerate()}>{loading ? "در حال ساخت…" : "بازسازی با داده تازه ↻"}</button></div>
+      <div className={`manager-live-strip panel ${error ? "has-error" : ""}`}><div><i className="status-dot"/><span><strong>{stage}</strong><small>{error ? error : plan ? `آخرین تحلیل: ${new Date(plan.generatedAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" })} · ${plan.sources.length.toLocaleString("fa-IR")} منبع زنده · دانش پروژه ${plan.contextRevision.slice(0, 8)}` : "این فرایند در اولین ورود هر روز خودکار اجرا می‌شود."}</small></span></div><button className="btn quiet" disabled={loading} onClick={() => void regenerate()}>{loading ? "در حال ساخت…" : "بازسازی با داده تازه ↻"}</button></div>
 
       {plan && <article className={`publish-decision panel ${plan.publishDecision}`}><span>{plan.publishDecision === "publish" ? "امروز منتشر می‌کنیم" : plan.publishDecision === "light" ? "امروز سبک منتشر می‌کنیم" : "امروز پست تازه نمی‌گذاریم"}</span><strong>{plan.publishReason}</strong></article>}
 
-      {plan?.accountState && <article className="panel account-state-card"><div className="panel-head"><div><span className="eyebrow">وضعیت زنده اکانت رسمی</span><h3 dir="ltr">{plan.accountState.handle}</h3></div><span className="sent-chip">{plan.accountState.stage === "bootstrap" ? "راه‌اندازی" : plan.accountState.stage === "early" ? "ابتدایی" : "فعال"}</span></div><p>{plan.accountState.summaryFa}</p><div className="account-recent-posts">{plan.accountState.recentPosts.length ? plan.accountState.recentPosts.slice(0, 3).map((post) => <a key={post.id} href={post.url} target="_blank" rel="noreferrer"><small dir="ltr">{post.postedAt || post.url}</small><span dir="auto">{post.text}</span></a>) : <div className="empty-state compact"><strong>پست عمومی تازه‌ای دیده نشد.</strong><p>برنامه امروز باید محافظه‌کارانه و معرفی‌محور باشد.</p></div>}</div></article>}
+      {plan?.accountState && <article className="panel account-state-card"><div className="panel-head"><div><span className="eyebrow">وضعیت زنده اکانت رسمی</span><h3 dir="ltr">{plan.accountState.handle}</h3></div><span className="sent-chip">{plan.accountState.stage === "bootstrap" ? "راه‌اندازی" : plan.accountState.stage === "early" ? "ابتدایی" : "فعال"}</span></div><p>{plan.accountState.summaryFa}</p>{plan.accountState.engagementTrend && plan.accountState.engagementTrend !== "unknown" && <div className="reach-meta compact"><span>{plan.accountState.engagementTrend === "up" ? "روند تعامل: رو به بالا" : plan.accountState.engagementTrend === "down" ? "روند تعامل: افت" : "روند تعامل: ثابت"}</span></div>}<div className="account-recent-posts">{plan.accountState.recentPosts.length ? plan.accountState.recentPosts.slice(0, 3).map((post) => <a key={post.id} href={post.url} target="_blank" rel="noreferrer"><small dir="ltr">{post.postedAt || post.url}</small><span dir="auto">{post.text}</span></a>) : <div className="empty-state compact"><strong>پست عمومی تازه‌ای دیده نشد.</strong><p>برنامه امروز باید محافظه‌کارانه و معرفی‌محور باشد.</p></div>}</div></article>}
+
+      <AgentSignalsPanel signals={agentSignals} onNavigate={onNavigate} />
+      {agentSignals?.researchBridge && <ResearchBridgeBanner bridge={agentSignals.researchBridge} onNavigate={onNavigate} />}
 
       {plan && <div className="simple-status panel"><div><i className="status-dot"/><span><strong>وضعیت عمومی اکانت بررسی شد</strong><small>{plan.sources.filter((source) => source.channel === "account").length.toLocaleString("fa-IR")} منبع از پروفایل و پست‌های عمومی اکانت با Firecrawl</small></span></div><div><i className="budget-lock">✓</i><span><strong>دانش واقعی پروژه وارد تصمیم شد</strong><small>{plan.sources.filter((source) => source.channel === "project" || source.channel === "product").length.toLocaleString("fa-IR")} منبع اول‌شخص از مخزن و وب‌سایت محصول</small></span></div><div><i className="telegram-dot">◇</i><span><strong>بازار و گفتگوهای مرتبط رصد شدند</strong><small>{plan.sources.filter((source) => ["x", "news", "competitor"].includes(source.channel)).length.toLocaleString("fa-IR")} منبع تازه از X، خبر و رقبا؛ بدون مصرف اعتبار X API</small></span></div></div>}
 
@@ -404,7 +722,7 @@ function Overview({ onNavigate, manager }: { onNavigate: (view: View) => void; m
         <div><i className="telegram-dot">➤</i><span><strong>تلگرام به اپراتور خبر می‌دهد</strong><small>برای هر کار آماده، لینک مستقیم همین صفحه ارسال می‌شود.</small></span></div>
       </div>
 
-      <details className="manager-shortcuts panel"><summary>ابزارهای مدیر را نشان بده <small>اپراتور معمولاً به این قسمت نیاز ندارد</small></summary><div>{[["strategy","برنامه هفتگی"],["creative","ساخت محتوای جدید"],["budget","کنترل اعتبار X"],["settings","تنظیمات فنی"]].map(([target,label]) => <button className="btn quiet" key={target} onClick={() => onNavigate(target as View)}>{label}</button>)}</div></details>
+      <details className="manager-shortcuts panel"><summary>ابزارهای مدیر را نشان بده <small>اپراتور معمولاً به این قسمت نیاز ندارد</small></summary><div>{[["strategy","برنامه هفتگی"],["creative","ساخت محتوای جدید"],["budget","مصرف API"],["settings","تنظیمات فنی"]].map(([target,label]) => <button className="btn quiet" key={target} onClick={() => onNavigate(target as View)}>{label}</button>)}</div></details>
     </section>
   );
 }
@@ -489,7 +807,10 @@ function RepliesView({ replyItems, onRepliesChange, sentIds, onMarkSent }: { rep
             <button key={item.id} className={`inbox-item ${reply.id === item.id ? "active" : ""} ${sentIds.includes(item.id) ? "handled" : ""}`} onClick={() => { setSelectedId(item.id); setMoreOpen(false); }}>
               <span className="avatar">{item.avatar}</span>
               <span><strong dir="ltr">{item.handle.startsWith("@") ? item.handle : `@${item.handle}`}</strong><small>{item.original}</small><em>{item.language} · {item.age}</em></span>
-              {sentIds.includes(item.id) ? <span className="sent-chip">{item.publishVerified ? "تأییدشد" : "ارسال‌شده"}</span> : <RiskBadge risk={escalated.ids.includes(item.id) ? "red" : item.risk} />}
+              {sentIds.includes(item.id) ? <span className="sent-chip">{item.publishVerified ? "تأییدشد" : "ارسال‌شده"}</span> : <>
+                {item.semiAutoReady && <SemiAutoBadge />}
+                <RiskBadge risk={escalated.ids.includes(item.id) ? "red" : item.risk} />
+              </>}
             </button>
           ))}
           {visibleReplies.length === 0 && <div className="empty-state compact"><strong>پاسخی پیدا نشد.</strong><p>عبارت جست‌وجو یا فیلتر زبان را تغییر دهید.</p></div>}
@@ -500,7 +821,7 @@ function RepliesView({ replyItems, onRepliesChange, sentIds, onMarkSent }: { rep
         <div className="conversation-motion" key={reply.id}>
         <div className="conversation-head">
               <div className="identity"><span className="avatar large">{reply.avatar}</span><div><strong dir="ltr">{reply.handle.startsWith("@") ? reply.handle : `@${reply.handle}`}</strong><small>{reply.language} · {reply.sentiment} · {reply.age} قبل</small><a className="tweet-deep-link" href={tweetUrl} target="_blank" rel="noreferrer" dir="ltr">{tweetUrl}</a></div></div>
-          <div><RiskBadge risk={escalated.ids.includes(reply.id) ? "red" : reply.risk} /><div className="action-menu-wrap"><button className={`icon-button ${moreOpen ? "active" : ""}`} onClick={() => setMoreOpen((value) => !value)} aria-label="اقدام‌های بیشتر" aria-expanded={moreOpen}>•••</button>{moreOpen && <div className="action-menu"><button onClick={async () => { await navigator.clipboard?.writeText(reply.original); setMoreOpen(false); notify("متن اصلی کاربر کپی شد"); }}>کپی متن کاربر</button><button onClick={async () => { await navigator.clipboard?.writeText(tweetUrl); setMoreOpen(false); notify("لینک کامنت کپی شد"); }}>کپی لینک کامنت</button><button onClick={() => { setMoreOpen(false); window.open(tweetUrl, "_blank", "noopener,noreferrer"); }}>مشاهده کامنت در X ↗</button></div>}</div></div>
+          <div><RiskBadge risk={escalated.ids.includes(reply.id) ? "red" : reply.risk} />{reply.semiAutoReady && <SemiAutoBadge />}<div className="action-menu-wrap"><button className={`icon-button ${moreOpen ? "active" : ""}`} onClick={() => setMoreOpen((value) => !value)} aria-label="اقدام‌های بیشتر" aria-expanded={moreOpen}>•••</button>{moreOpen && <div className="action-menu"><button onClick={async () => { await navigator.clipboard?.writeText(reply.original); setMoreOpen(false); notify("متن اصلی کاربر کپی شد"); }}>کپی متن کاربر</button><button onClick={async () => { await navigator.clipboard?.writeText(tweetUrl); setMoreOpen(false); notify("لینک کامنت کپی شد"); }}>کپی لینک کامنت</button><button onClick={() => { setMoreOpen(false); window.open(tweetUrl, "_blank", "noopener,noreferrer"); }}>مشاهده کامنت در X ↗</button></div>}</div></div>
         </div>
         <div className="original-post">
           <span className="context-label">پاسخ دریافت‌شده</span>
@@ -508,7 +829,7 @@ function RepliesView({ replyItems, onRepliesChange, sentIds, onMarkSent }: { rep
           <div className="translation"><span>ترجمه برای اپراتور</span><p dir="rtl">{reply.translation}</p></div>
         </div>
         <div className="answer-card">
-          <div className="answer-top"><div><span className="eyebrow">پاسخ پیشنهادی · {reply.language}</span><h3>آماده بررسی انسانی</h3></div><span className="confidence">اطمینان {reply.confidence}٪</span></div>
+          <div className="answer-top"><div><span className="eyebrow">پاسخ پیشنهادی · {reply.language}{reply.semiAutoReady ? " · نیمه‌خودکار" : ""}</span><h3>{reply.semiAutoReady ? "آماده ارسال سریع با تأیید انسانی" : "آماده بررسی انسانی"}</h3></div><span className="confidence">اطمینان {reply.confidence}٪</span></div>
           <div className="answer-text" dir="auto">{reply.answer}</div>
           <div className="translation answer-translation"><span>ترجمه پاسخ</span><p dir="rtl">{reply.answerTranslation}</p></div>
           <div className="source-strip"><span>منبع پاسخ</span><b>منشن واقعی اکانت در X</b><b>{reply.liveContextUsed ? "کانتکست عمومی گفتگو با Firecrawl" : "متن مستقیم منشن"}</b><b title={reply.groundingFacts?.join(" · ") || reply.reviewReason || "دانش تأییدشده پروژه"}>{reply.contextRevision ? `دانش پروژه · ${reply.contextRevision.slice(0, 8)}` : "دانش قدیمی · بازتولید لازم"}</b></div>
@@ -612,20 +933,22 @@ function ContentView({ content, onContentChange, sentIds, onMarkSent, onUnmarkSe
   );
 }
 
-function SentView({ replyIds, postIds, replyItems, content }: { replyIds: string[]; postIds: string[]; replyItems: ReplyItem[]; content: ContentItem[] }) {
+function SentView({ replyIds, postIds, replyItems, content, interactions }: { replyIds: string[]; postIds: string[]; replyItems: ReplyItem[]; content: ContentItem[]; interactions: InteractionRecord[] }) {
   const records = [
     ...content.filter((item) => postIds.includes(item.id)).map((item) => ({ id: item.id, type: "پست", title: item.title, detail: item.postText, language: item.language, url: item.matchedUrl || X_ACCOUNT_URL, verified: Boolean(item.publishVerified) })),
     ...replyItems.filter((item) => replyIds.includes(item.id)).map((item) => ({ id: item.id, type: "پاسخ", title: `پاسخ به ${item.handle}`, detail: item.answer, language: item.language, url: item.matchedUrl || item.tweetUrl || `https://x.com/i/web/status/${item.id}`, verified: Boolean(item.publishVerified) })),
+    ...interactions.map((item) => ({ id: item.id, type: "تعامل", title: `کامنت روی ${item.account}`, detail: item.comment, language: "English", url: item.matchedUrl || item.postUrl, verified: item.verified })),
   ];
   return <section>
     <div className="history-summary">
       <article className="panel"><span>ثبت‌شده امروز</span><strong>{records.length}</strong><small>توسط میز اپراتور</small></article>
       <article className="panel"><span>پست منتشرشده</span><strong>{postIds.length}</strong><small>دارای تأیید انسانی</small></article>
       <article className="panel"><span>پاسخ ارسال‌شده</span><strong>{replyIds.length}</strong><small>با زبان اصلی کاربر</small></article>
+      <article className="panel"><span>تعامل رشد</span><strong>{interactions.length}</strong><small>کامنت روی پست‌های هدف</small></article>
     </div>
     <article className="panel history-panel">
       <div className="panel-head"><div><span className="eyebrow">گزارش عملیات</span><h3>ارسال‌های تأییدشده اپراتور</h3><p>پس از دکمه «من ارسال کردم»، Firecrawl صفحه عمومی X را بررسی می‌کند تا مطمئن شود متن واقعاً منتشر شده است.</p></div></div>
-      {records.length === 0 ? <div className="empty-state"><strong>هنوز ارسالی ثبت نشده است.</strong><p>پس از انتشار در X، دکمه «من ارسال کردم» را در صف محتوا یا صندوق پاسخ‌ها بزنید.</p></div> : <div className="history-list">{records.map((record) => <div className="history-row" key={record.id}><span className={`history-icon ${record.type === "پست" ? "post" : "reply"}`}>{record.type === "پست" ? "≡" : "↩"}</span><div><strong>{record.title}</strong><p dir="auto">{record.detail}</p><small>{record.language} · {record.verified ? "تأییدشده با Firecrawl" : "ثبت محلی اپراتور"}</small>{record.url && <a className="tweet-deep-link" href={record.url} target="_blank" rel="noreferrer" dir="ltr">{record.url}</a>}</div><span className="sent-chip">{record.verified ? "✓ تأییدشد" : "✓ ثبت‌شده"}</span><button className="btn quiet" onClick={() => window.open(record.url || "https://x.com/", "_blank", "noopener,noreferrer")}>بازکردن در X ↗</button></div>)}</div>}
+      {records.length === 0 ? <div className="empty-state"><strong>هنوز ارسالی ثبت نشده است.</strong><p>پس از انتشار در X، دکمه «من ارسال کردم» را در صف محتوا، صندوق پاسخ‌ها یا برنامه رشد بزنید.</p></div> : <div className="history-list">{records.map((record) => <div className="history-row" key={record.id}><span className={`history-icon ${record.type === "پست" ? "post" : record.type === "تعامل" ? "growth" : "reply"}`}>{record.type === "پست" ? "≡" : record.type === "تعامل" ? "◎" : "↩"}</span><div><strong>{record.title}</strong><p dir="auto">{record.detail}</p><small>{record.language} · {record.verified ? "تأییدشده با Firecrawl" : "ثبت محلی اپراتور"}</small>{record.url && <a className="tweet-deep-link" href={record.url} target="_blank" rel="noreferrer" dir="ltr">{record.url}</a>}</div><span className="sent-chip">{record.verified ? "✓ تأییدشد" : "✓ ثبت‌شده"}</span><button className="btn quiet" onClick={() => window.open(record.url || "https://x.com/", "_blank", "noopener,noreferrer")}>بازکردن در X ↗</button></div>)}</div>}
     </article>
   </section>;
 }
@@ -636,10 +959,6 @@ function TelegramView() {
     ["پاسخ تازه در صندوق", "پس از تولید پاسخ منبع‌دار", true],
     ["بودجه X در ۵۰٪، ۸۰٪ و ۱۰۰٪", "فوری", true],
     ["پایان پژوهش هدفمند", "همراه لینک نتیجه", true],
-    ["پاسخ بدون اقدام بیش از ۱۵ دقیقه", "هنوز پیاده‌سازی نشده", false],
-    ["توقف Poller یا خطای OAuth", "هنوز پیاده‌سازی نشده", false],
-    ["کپی‌شده ولی ثبت‌نشده", "هنوز پیاده‌سازی نشده", false],
-    ["خلاصه روزانه عملکرد", "هنوز پیاده‌سازی نشده", false],
   ] as const;
   const [connection, setConnection] = useState<TelegramConnection | null>(null);
   const [checking, setChecking] = useState(true);
@@ -698,22 +1017,17 @@ function TelegramView() {
       <div className="connection-state"><span className={`status-large ${isConnected ? "connected" : "waiting"}`}><i/> {checking ? "در حال بررسی" : isConnected ? "متصل و فعال" : "منتظر شناسایی گروه"}</span><div><span>نام بات</span><strong dir="ltr">{botUsername}</strong></div><div><span>گروه مقصد</span><strong>{groupTitle}</strong></div><button className="btn accent" disabled={checking || sending} onClick={() => void testTelegram()}>{sending ? "در حال ارسال…" : isConnected ? "آزمایش ارسال اعلان" : "شناسایی دوباره گروه"}</button></div>
       {!isConnected && !checking && <div className="telegram-setup"><strong>یک مرحله تا اتصال مانده</strong><p>در گروه تلگرام این دستور را ارسال کنید و سپس «شناسایی دوباره گروه» را بزنید:</p><code dir="ltr">/connect@SocialWalletTrackerBot</code></div>}
       {telegramNotice && <p className={`telegram-notice ${isConnected ? "success" : "warning"}`} role="status">{telegramNotice}</p>}
-      <div className="deep-link-note"><strong>لینک اعلان چگونه کار می‌کند؟</strong><p>اعلان اپراتور را مستقیم به بخش مرتبطِ برنامه، پست، پاسخ یا پژوهش می‌برد؛ سپس متن را بررسی، در X منتشر و ارسال را در داشبورد ثبت می‌کند.</p></div>
-    </article>
-
-    <article className="panel telegram-feed">
-      <div className="panel-head"><div><span className="eyebrow">رویدادهای واقعی</span><h3>اعلان‌های اخیر</h3></div></div>
-      <div className="telegram-messages"><div className="empty-state"><strong>تاریخچه اعلان‌ها در گروه تلگرام است.</strong><p>این داشبورد در حال حاضر فقط ارسال موفق را تأیید می‌کند و برای جلوگیری از نمایش داده ساختگی، پیام‌های قبلی گروه را شبیه‌سازی نمی‌کند.</p></div></div>
+      <div className="deep-link-note"><strong>لینک اعلان چگونه کار می‌کند؟</strong><p>اعلان اپراتور را مستقیم به بخش مرتبطِ برنامه، پست، پاسخ یا پژوهش می‌برد؛ سپس متن را بررسی، در X منتشر و ارسال را در داشبورد ثبت می‌کند. تاریخچه کامل اعلان‌ها در خود گروه تلگرام باقی می‌ماند.</p></div>
     </article>
 
     <article className="panel notification-rules">
       <div className="panel-head"><div><span className="eyebrow">قوانین اعلان</span><h3>چه زمانی گروه مطلع شود؟</h3><p>اعلان‌های تکراری با کلید یکتا حذف می‌شوند تا گروه شلوغ نشود.</p></div></div>
-      <div className="rule-list">{notificationRules.map((rule) => <div className="notification-rule" key={rule[0]}><span className={`switch ${rule[2] ? "on" : ""}`} aria-label={rule[2] ? "پیاده‌سازی‌شده" : "در انتظار پیاده‌سازی"}><i/></span><div><strong>{rule[0]}</strong><small>{rule[1]}</small></div><span>{rule[2] ? "فعال و واقعی" : "برنامه بعدی"}</span></div>)}</div>
+      <div className="rule-list">{notificationRules.map((rule) => <div className="notification-rule" key={rule[0]}><span className="switch on" aria-label="فعال"><i/></span><div><strong>{rule[0]}</strong><small>{rule[1]}</small></div><span>فعال</span></div>)}</div>
     </article>
   </section>;
 }
 
-function ResearchView({ onGenerate }: { onGenerate: (focus?: string) => Promise<void> }) {
+function ResearchView({ onGenerate, researchBridge }: { onGenerate: (focus?: string) => Promise<void>; researchBridge: ResearchBridgeAction | null }) {
   const [researchItems, setResearchItems] = useState<ResearchItem[]>([]);
   const [researchReady, setResearchReady] = useState(false);
   const [researchOpen, setResearchOpen] = useState(false);
@@ -725,6 +1039,7 @@ function ResearchView({ onGenerate }: { onGenerate: (focus?: string) => Promise<
   const [runError, setRunError] = useState("");
   const [completedResult, setCompletedResult] = useState<ResearchItem | null>(null);
   const [telegramNotified, setTelegramNotified] = useState(false);
+  const [latestBridge, setLatestBridge] = useState<ResearchBridgeAction | null>(researchBridge);
   const [toast, setToast] = useState("");
   const running = runState === "running";
   const progressLabels = ["ارسال درخواست امن به Firecrawl", "جست‌وجو و جمع‌آوری منابع زنده", "حذف نتایج تکراری و آماده‌سازی شواهد", "بازسازی برنامه و صف محتوا", "ارسال اعلان پایان کار به تلگرام"];
@@ -744,6 +1059,10 @@ function ResearchView({ onGenerate }: { onGenerate: (focus?: string) => Promise<
   useEffect(() => {
     if (researchReady) window.localStorage.setItem("wallet-social-research-results-live-v2", JSON.stringify(researchItems));
   }, [researchItems, researchReady]);
+
+  useEffect(() => {
+    setLatestBridge(researchBridge);
+  }, [researchBridge]);
 
   const openResearch = () => {
     setRunState("idle");
@@ -771,11 +1090,12 @@ function ResearchView({ onGenerate }: { onGenerate: (focus?: string) => Promise<
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ topic: topic.trim(), scope: sourceScope }),
       });
-      const data = await response.json() as { ok?: boolean; result?: ResearchItem; telegramNotified?: boolean; error?: string };
+      const data = await response.json() as { ok?: boolean; result?: ResearchItem; telegramNotified?: boolean; researchBridge?: ResearchBridgeAction | null; error?: string };
       if (!response.ok || !data.ok || !data.result) throw new Error(data.error || "اجرای پژوهش ناموفق بود.");
       setResearchItems((current) => [data.result!, ...current.filter((item) => item.id !== data.result!.id)]);
       setCompletedResult(data.result);
       setTelegramNotified(Boolean(data.telegramNotified));
+      if (data.researchBridge) setLatestBridge(data.researchBridge);
       setProgressStep(3);
       await onGenerate(topic.trim());
       setProgressStep(4);
@@ -802,6 +1122,7 @@ function ResearchView({ onGenerate }: { onGenerate: (focus?: string) => Promise<
 
   return (
     <section className="research-grid">
+      {latestBridge && <ResearchBridgeBanner bridge={latestBridge} />}
       <article className="panel research-hero"><span className="eyebrow">بررسی انتخابی</span><h2>Firecrawl فقط وقتی اجرا می‌شود که کانتکست ارزش هزینه را داشته باشد.</h2><p>پس از شروع، وضعیت پژوهش مرحله‌به‌مرحله نمایش داده می‌شود؛ نتیجه همراه منابع در همین صفحه می‌ماند و پایان کار در تلگرام اعلام می‌شود.</p><button className="btn accent" onClick={openResearch}>اجرای پژوهش هدفمند</button></article>
       {researchItems.map((item) => <article className="panel research-card" key={item.id}><div className="score">{item.score}</div><div><span>{item.tag}</span><h3>{item.title}</h3><p>{item.meta}</p></div><button className="text-btn" onClick={() => setSelectedEvidence(item)}>بررسی شواهد ←</button></article>)}
       {researchItems.length === 0 && <article className="panel empty-state"><strong>هنوز پژوهش واقعی اجرا نشده است.</strong><p>با «اجرای پژوهش هدفمند» یک موضوع واقعی را برای Firecrawl بفرستید؛ نتیجه و منابع همین‌جا ثبت می‌شوند.</p></article>}
@@ -876,45 +1197,173 @@ function CreativeView({ onNavigate, plan, onGenerate }: { onNavigate: (view: Vie
 }
 
 
-function GrowthView({ plan }: { plan: DailyManagerPlan | null }) {
+function GrowthView({ plan, interactionRecords, agentSignals }: { plan: DailyManagerPlan | null; interactionRecords: ReturnType<typeof useInteractionRecords>; agentSignals: AgentSignals | null }) {
   const [copied, setCopied] = useState('');
+  const [toast, setToast] = useState('');
+  const [verifyingId, setVerifyingId] = useState('');
   const copy = (id:string, value:string) => { void navigator.clipboard.writeText(value); setCopied(id); window.setTimeout(() => setCopied(''), 1800); };
-  const opportunities = plan?.interactions.map((item) => ({ id: item.id, topic: item.account, query: item.postUrl, reason: item.reason, comment: item.comment, directUrl: item.postUrl })) || [];
+  const notify = (message: string) => { setToast(message); window.setTimeout(() => setToast(''), 2800); };
+  const opportunities = plan?.interactions.map((item) => ({
+    id: item.id,
+    topic: item.account,
+    query: item.postUrl,
+    reason: item.reason,
+    comment: item.comment,
+    directUrl: item.postUrl,
+    reachScore: item.reachScore,
+    tier: item.tier,
+    engagementLabel: item.engagementLabel,
+    followersLabel: item.followersLabel,
+    scoreReasonFa: item.scoreReasonFa,
+    threadEnriched: item.threadEnriched,
+    commentRegenerated: item.commentRegenerated,
+  })) || [];
+  const scoreClass = (score?: number) => score === undefined ? "" : score >= 70 ? "high" : score >= 55 ? "mid" : "low";
+
+  const confirmInteraction = async (item: typeof opportunities[number]) => {
+    setVerifyingId(item.id);
+    try {
+      const proof = await verifyPublication("interaction", item.comment, item.directUrl);
+      if (!proof.verified) {
+        notify(proof.message || "کامنت هنوز در گفتگوی هدف دیده نشد.");
+        return;
+      }
+      const response = await fetch("/api/manager/interactions/history", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          interactionId: item.id,
+          account: item.topic,
+          postUrl: item.directUrl,
+          comment: item.comment,
+          verified: true,
+          matchedUrl: proof.matchedUrl || item.directUrl,
+          reachScore: item.reachScore,
+        }),
+      });
+      const payload = await response.json() as { ok?: boolean; error?: string };
+      if (!response.ok || !payload.ok) throw new Error(payload.error || "ثبت تعامل در تاریخچه Agent ناموفق بود.");
+      interactionRecords.upsert({
+        id: item.id,
+        account: item.topic.startsWith("@") ? item.topic : `@${item.topic}`,
+        postUrl: item.directUrl,
+        comment: item.comment,
+        verified: true,
+        matchedUrl: proof.matchedUrl || item.directUrl,
+        reachScore: item.reachScore,
+        completedAt: new Date().toISOString(),
+      });
+      notify(proof.message || "کامنت تعامل در X تأیید شد.");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "راستی‌آزمایی کامنت ناموفق بود.");
+    } finally {
+      setVerifyingId('');
+    }
+  };
+
   return <section className="growth-view">
-    <div className="growth-hero panel"><div><span className="eyebrow">رشد باکیفیت، نه اسپم</span><h2>سه تعامل معنی‌دار بهتر از سی کامنت تکراری است.</h2><p>هر پیشنهاد فقط وقتی نمایش داده می‌شود که لینک کامل پست واقعی X از Firecrawl موجود باشد.</p></div><div className="api-gate"><i>✓</i><div><strong>اعتبار X برای رشد مصرف نمی‌شود</strong><small>Firecrawl پست عمومی هدف را پیدا می‌کند؛ X API فقط برای کامنت‌های اکانت خودمان رزرو است.</small></div></div></div>
-    <div className="growth-layout"><div className="opportunity-list">{opportunities.map((item) => <article className="panel opportunity-card lift-card" key={item.id}><header><div><span className="eyebrow">فرصت زنده امروز</span><h3 dir="ltr">{item.topic.startsWith("@") ? item.topic : `@${item.topic}`}</h3></div><span className="match-score">LIVE</span></header><div className="target-query"><small>لینک کامل پست برای گذاشتن کامنت</small><a href={item.directUrl} target="_blank" rel="noreferrer" dir="ltr">{item.query}</a></div><p>{item.reason}</p><blockquote dir="ltr">{item.comment}</blockquote><footer><a className="btn quiet" href={item.directUrl} target="_blank" rel="noreferrer">بازکردن پست در X ↗</a><button className="btn quiet" onClick={() => copy(`${item.id}-url`, item.directUrl)}>{copied === `${item.id}-url` ? '✓ لینک کپی شد' : 'کپی لینک پست'}</button><button className="btn accent" onClick={() => copy(item.id,item.comment)}>{copied === item.id ? '✓ کپی شد' : 'کپی کامنت پیشنهادی'}</button></footer></article>)}{opportunities.length === 0 && <article className="panel empty-state"><strong>فرصت تعامل واقعی پیدا نشده است.</strong><p>تا زمانی که مدیر هوشمند یک پست واقعی و مرتبط در X پیدا نکند، پیشنهادی نمایش داده نمی‌شود.</p></article>}</div>
-      <aside className="growth-side"><article className="panel guard-card"><span className="eyebrow">گارد ضداسپم</span><h3>قبل از هر تعامل</h3><ul><li><b>ارتباط:</b> پست باید واقعاً درباره موضوع محصول باشد.</li><li><b>اصالت:</b> کامنت عمومی، تکراری یا صرفاً تبلیغاتی رد می‌شود.</li><li><b>تعداد:</b> حداکثر ۴ تعامل دستی باکیفیت در روز.</li><li><b>توقف:</b> پاسخ تکراری، لایک خودکار و فالو انبوه ممنوع.</li></ul></article><article className="panel target-accounts"><span className="eyebrow">اکانت‌های واقعی امروز</span><h3>چه کسانی ارزش تعامل دارند؟</h3>{(plan?.interactions || []).map((item) => <div key={item.id}><span>◎</span><p><strong dir="ltr">{item.account}</strong><small>{item.reason}</small></p><b>{item.time}</b></div>)}{!plan?.interactions.length && <div className="empty-state compact"><strong>هدف تأییدشده‌ای نیست.</strong><p>هیچ اکانت نمونه‌ای نمایش داده نمی‌شود.</p></div>}</article></aside></div>
+    <div className="growth-hero panel"><div><span className="eyebrow">رشد باکیفیت، نه اسپم</span><h2>تعامل روی اکانت‌های بزرگ با کامنت متناسب گفتگو.</h2><p>Agent کل گفتگو را scrape می‌کند، کامنت را بازنویسی می‌کند، Reach را امتیاز می‌دهد، نهنگ‌های Tier S/A را رصد می‌کند و پس از ارسال، انتشار را با Firecrawl تأیید می‌کند.</p></div><div className="api-gate"><i>✓</i><div><strong>Agent پیش‌فعال · فاز ۳</strong><small>رصد نهنگ + پل پژوهش + پاسخ نیمه‌خودکار + هوش اکانت</small></div></div></div>
+    {agentSignals?.researchBridge && <ResearchBridgeBanner bridge={agentSignals.researchBridge} />}
+    <div className="growth-layout"><div className="opportunity-list">{opportunities.map((item) => { const sent = interactionRecords.isSent(item.id); const saved = interactionRecords.find(item.id); return <article className={`panel opportunity-card lift-card ${sent ? "handled" : ""}`} key={item.id}><header><div><span className="eyebrow">فرصت رتبه‌بندی‌شده · {item.tier ? `Tier ${item.tier}` : "در حال تحلیل"}</span><h3 dir="ltr">{item.topic.startsWith("@") ? item.topic : `@${item.topic}`}</h3></div><div className={`match-score ${scoreClass(item.reachScore)}`} title={item.scoreReasonFa || "Reach score"}><strong>{item.reachScore ?? "—"}</strong><small>Reach</small></div></header>{(item.engagementLabel || item.followersLabel || item.threadEnriched || item.commentRegenerated) && <div className="reach-meta"><span>{item.followersLabel || "اکانت کریپتو/ولت"}</span>{item.engagementLabel && <span>{item.engagementLabel}</span>}{item.threadEnriched && <span>کانتکست گفتگو ✓</span>}{item.commentRegenerated && <span>بازنویسی Agent ✓</span>}</div>}<div className="target-query"><small>لینک کامل پست برای گذاشتن کامنت</small><a href={item.directUrl} target="_blank" rel="noreferrer" dir="ltr">{item.query}</a></div><p>{item.reason}</p>{item.scoreReasonFa && <div className="modal-hint"><i />{item.scoreReasonFa}</div>}<blockquote dir="ltr">{item.comment}</blockquote><div className="operator-steps compact"><span><b>۱</b> کپی کامنت</span><span><b>۲</b> بازکردن پست</span><span><b>۳</b> تأیید با Firecrawl</span></div><footer><a className="btn quiet" href={item.directUrl} target="_blank" rel="noreferrer">بازکردن پست در X ↗</a><button className="btn quiet" onClick={() => copy(`${item.id}-url`, item.directUrl)}>{copied === `${item.id}-url` ? '✓ لینک کپی شد' : 'کپی لینک پست'}</button><button className="btn accent" onClick={() => copy(item.id,item.comment)}>{copied === item.id ? '✓ کپی شد' : 'کپی کامنت پیشنهادی'}</button><button className={`btn sent-action ${sent ? "done" : ""}`} disabled={sent || verifyingId === item.id} onClick={() => void confirmInteraction(item)}>{sent ? (saved?.verified ? "✓ در X تأیید شد" : "✓ کامنت ثبت شد") : verifyingId === item.id ? "در حال تأیید روی X…" : "من این کامنت را گذاشتم"}</button></footer></article>; })}{opportunities.length === 0 && <article className="panel empty-state"><strong>فرصت تعامل واقعی پیدا نشده است.</strong><p>تا زمانی که مدیر هوشمند یک پست واقعی و مرتبط در X پیدا نکند، پیشنهادی نمایش داده نمی‌شود.</p></article>}</div>
+      <aside className="growth-side"><article className="panel guard-card"><span className="eyebrow">گارد ضداسپم</span><h3>قبل از هر تعامل</h3><ul><li><b>Reach:</b> اولویت با امتیاز ۷۰+ و اکانت‌های Tier S/A.</li><li><b>کانتکست:</b> کامنت باید از scrape کامل گفتگو بازنویسی شده باشد.</li><li><b>تاریخچه:</b> Agent تکرار روی همان پست/اکانت را حذف می‌کند.</li><li><b>تعداد:</b> حداکثر ۴ تعامل دستی باکیفیت در روز.</li></ul></article><article className="panel target-accounts"><span className="eyebrow">اکانت‌های رتبه‌بندی‌شده امروز</span><h3>چه کسانی ارزش تعامل دارند؟</h3>{(plan?.interactions || []).map((item) => <div key={item.id}><span>{item.tier === "S" ? "★" : item.tier === "A" ? "◆" : "◎"}</span><p><strong dir="ltr">{item.account}</strong><small>{item.scoreReasonFa || item.reason}</small></p><b>{item.reachScore !== undefined ? `Reach ${item.reachScore}` : item.time}</b></div>)}{!plan?.interactions.length && <div className="empty-state compact"><strong>هدف تأییدشده‌ای نیست.</strong><p>هیچ اکانت نمونه‌ای نمایش داده نمی‌شود.</p></div>}</article>      </aside></div>
+    {toast && <div className="toast">✓ {toast}</div>}
   </section>;
 }
 
 
 function BudgetView() {
-  const [usage, setUsage] = useState<{ resourceReads: number; budgetUsed: number; updatedAt: string } | null>(null);
-  const [loading, setLoading] = useState(true);
-  const loadUsage = useCallback(async () => {
-    setLoading(true);
+  const [xUsage, setXUsage] = useState<XUsageSnapshot | null>(() => readUsageCache()?.xUsage ?? null);
+  const [aiUsage, setAiUsage] = useState<AiUsageSnapshot | null>(() => readUsageCache()?.aiUsage ?? null);
+  const [loading, setLoading] = useState(() => !readUsageCache());
+  const [error, setError] = useState("");
+
+  const loadUsage = useCallback(async (options: { silent?: boolean } = {}) => {
+    if (!options.silent) setLoading(true);
+    setError("");
     try {
-      const response = await fetch("/api/x/inbox", { cache: "no-store" });
-      const payload = await response.json() as { ok?: boolean; resourceReads?: number; budgetUsed?: number; updatedAt?: string };
-      if (response.ok && payload.ok) setUsage({ resourceReads: payload.resourceReads || 0, budgetUsed: payload.budgetUsed || 0, updatedAt: payload.updatedAt || "" });
+      const [inboxResponse, aiResponse] = await Promise.all([
+        fetch("/api/x/inbox", { cache: "no-store" }),
+        fetch("/api/manager/usage", { cache: "no-store" }),
+      ]);
+      const inboxPayload = await inboxResponse.json() as { ok?: boolean; resourceReads?: number; budgetUsed?: number; updatedAt?: string; error?: string };
+      const aiPayload = await aiResponse.json() as { ok?: boolean; usage?: AiUsageSnapshot; error?: string };
+      if (!inboxResponse.ok || !inboxPayload.ok) throw new Error(inboxPayload.error || "دریافت مصرف X ناموفق بود.");
+      if (!aiResponse.ok || !aiPayload.ok || !aiPayload.usage) throw new Error(aiPayload.error || "دریافت مصرف Grok/Firecrawl ناموفق بود.");
+      const nextXUsage = { resourceReads: inboxPayload.resourceReads || 0, budgetUsed: inboxPayload.budgetUsed || 0, updatedAt: inboxPayload.updatedAt || "" };
+      setXUsage(nextXUsage);
+      setAiUsage(aiPayload.usage);
+      writeUsageCache(nextXUsage, aiPayload.usage);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "دریافت مصرف ناموفق بود.");
     } finally {
       setLoading(false);
     }
   }, []);
-  useEffect(() => { const timer = window.setTimeout(() => void loadUsage(), 0); return () => window.clearTimeout(timer); }, [loadUsage]);
-  const budgetUsed = Math.min(5, usage?.budgetUsed || 0);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void loadUsage({ silent: Boolean(readUsageCache()) }), 0);
+    return () => window.clearTimeout(timer);
+  }, [loadUsage]);
+
+  const hasUsage = Boolean(xUsage && aiUsage);
+  if (!hasUsage && loading) return <BudgetViewSkeleton />;
+
+  const budgetUsed = Math.min(5, xUsage?.budgetUsed || 0);
   const budgetPercent = Math.min(100, (budgetUsed / 5) * 100);
   const remaining = Math.max(0, 4.99 - budgetUsed);
+  const firecrawlLiveRemaining = aiUsage?.firecrawl.live?.remainingCredits;
+  const firecrawlLivePlan = aiUsage?.firecrawl.live?.planCredits;
+  const xaiRemaining = aiUsage?.xai.tokensRemaining ?? Math.max(0, (aiUsage?.xai.tokenBudget || 0) - (aiUsage?.xai.totalTokens || 0));
+  const usageUpdatedLabel = aiUsage?.updatedAt
+    ? new Date(aiUsage.updatedAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+    : "";
+
   return (
-    <section>
-      <div className="budget-hero panel"><div><span className="eyebrow">محافظ هزینه فعال</span><h2>۵ دلار فقط برای خواندن کامنت‌های جدید</h2><p>هیچ جست‌وجو، انتشار پست، تولید محتوا یا درخواست Firecrawl از اعتبار X استفاده نمی‌کند.</p><button className="btn quiet" onClick={() => void loadUsage()} disabled={loading}>{loading ? "در حال دریافت…" : "دریافت مصرف واقعی داشبورد ↻"}</button></div><div className="budget-bar-large reserved"><span style={{width:`${budgetPercent}%`}}/><i className="mark half">هشدار ۲٫۵۰ دلار</i><i className="mark high">هشدار ۴ دلار</i></div></div>
-      <div className="usage-grid">
-        <article className="panel usage-card"><span className="eyebrow">مصرف ثبت‌شده داشبورد</span><strong>{budgetUsed.toFixed(3)} دلار</strong><p>{(usage?.resourceReads || 0).toLocaleString("fa-IR")} منشن جدید پردازش‌شده</p><small>{usage?.updatedAt ? `آخرین ثبت: ${new Date(usage.updatedAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" })}` : "هنوز منشن جدیدی ثبت نشده است"}</small></article>
-        <article className="panel usage-card"><span className="eyebrow">هزینه Owned Read</span><strong>۰٫۰۰۱ دلار</strong><p>برای هر منشن جدید برگشتی</p><small>هزینه بر اساس منبع جدید است، نه تعداد Poll</small></article>
-        <article className="panel usage-card"><span className="eyebrow">مانده تا توقف ایمن</span><strong>{remaining.toFixed(3)} دلار</strong><p>حدود {Math.floor(remaining / 0.001).toLocaleString("fa-IR")} منشن جدید دیگر</p><small>صورتحساب نهایی و رسمی فقط در X Console است</small></article>
+    <section className="budget-layout">
+      <div className="budget-hero panel">
+        <div>
+          <span className="eyebrow">پایش مدیر · {aiUsage?.month || "ماه جاری"}</span>
+          <h2>مصرف واقعی X، Grok و Firecrawl</h2>
+          <p>اعداد X از Poller منشن‌ها می‌آید. Grok و Firecrawl از هر درخواست موفق سمت سرور ثبت می‌شوند؛ اعتبار زنده Firecrawl در صورت دسترسی API نمایش داده می‌شود.{usageUpdatedLabel ? ` آخرین به‌روزرسانی AI: ${usageUpdatedLabel}.` : ""}</p>
+          <button className="btn quiet" onClick={() => void loadUsage()} disabled={loading}>{loading ? "در حال دریافت…" : "بروزرسانی مصرف ↻"}</button>
+        </div>
       </div>
-      <article className="panel budget-explanation"><strong>این صفحه را چطور بخوانم؟</strong><ol><li>سامانه هر ۲ دقیقه فقط مسیر منشن‌های اکانت خودمان را بررسی می‌کند.</li><li>اگر کامنت جدیدی نباشد، منبع تازه‌ای برای محاسبه هزینه دریافت نمی‌شود.</li><li>شناسه آخرین منشن ذخیره می‌شود تا موارد قدیمی عمداً دوباره درخواست نشوند.</li><li>در ۲٫۵۰ دلار و ۴ دلار به تلگرام هشدار ارسال می‌شود؛ در ۵ دلار پایش متوقف می‌شود.</li></ol></article>
-      <article className="panel alert-policy"><div className="panel-head"><div><span className="eyebrow">محافظ‌های خودکار</span><h3>هشدارهای اعتبار</h3></div><span className="live-pill"><i/> فعال</span></div><div className="policy-row"><span className="policy-level warning">۵۰٪</span><div><strong>هشدار اولیه در ۲٫۵۰ دلار</strong><small>اعلان تلگرام؛ پایش ادامه دارد</small></div><b>فعال</b></div><div className="policy-row"><span className="policy-level critical">۸۰٪</span><div><strong>هشدار مهم در ۴ دلار</strong><small>اعلان فوری به مدیر</small></div><b>فعال</b></div><div className="policy-row"><span className="policy-level stop">ایمن</span><div><strong>توقف در ۴٫۹۹ دلار</strong><small>یک سنت حاشیه امن برای آخرین batch؛ فقط Polling متوقف می‌شود.</small></div><b>محافظت‌شده</b></div></article>
+      {error && <article className="panel budget-error" role="alert"><strong>خطا در دریافت مصرف</strong><p>{error}</p></article>}
+
+      <article className="panel usage-section">
+        <div className="panel-head"><div><span className="eyebrow">X API · Owned Reads</span><h3>۵ دلار فقط برای منشن‌های اکانت خودمان</h3></div><span className="live-pill"><i/> فعال</span></div>
+        <div className="budget-bar-large reserved"><span style={{ width: `${budgetPercent}%` }} /><i className="mark half">۵۰٪</i><i className="mark high">۸۰٪</i></div>
+        <div className="usage-grid">
+          <div className="usage-card compact"><span className="eyebrow">مصرف ثبت‌شده</span><strong>{budgetUsed.toFixed(3)} دلار</strong><p>{(xUsage?.resourceReads || 0).toLocaleString("fa-IR")} منشن جدید</p></div>
+          <div className="usage-card compact"><span className="eyebrow">مانده تا توقف</span><strong>{remaining.toFixed(3)} دلار</strong><p>حدود {Math.floor(remaining / 0.001).toLocaleString("fa-IR")} منشن دیگر</p></div>
+          <div className="usage-card compact"><span className="eyebrow">آخرین ثبت</span><strong>{xUsage?.updatedAt ? new Date(xUsage.updatedAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran", hour: "2-digit", minute: "2-digit" }) : "—"}</strong><p>هر ۲ دقیقه فقط اگر منشن جدید باشد</p></div>
+        </div>
+      </article>
+
+      <article className="panel usage-section">
+        <div className="panel-head"><div><span className="eyebrow">Grok · xAI</span><h3>توکن‌های مدل {aiUsage?.xai.model || "grok-4.5"}</h3></div>{usageUpdatedLabel && <small>آخرین ثبت: {usageUpdatedLabel}</small>}</div>
+        <div className="budget-bar-large grok"><span style={{ width: `${aiUsage?.xai.tokenPercent || 0}%` }} /></div>
+        <div className="usage-grid">
+          <div className="usage-card compact"><span className="eyebrow">توکن مصرف‌شده</span><strong>{(aiUsage?.xai.totalTokens || 0).toLocaleString("fa-IR")}</strong><p>ورودی {(aiUsage?.xai.promptTokens || 0).toLocaleString("fa-IR")} · خروجی {(aiUsage?.xai.completionTokens || 0).toLocaleString("fa-IR")}</p></div>
+          <div className="usage-card compact"><span className="eyebrow">درخواست چت</span><strong>{(aiUsage?.xai.chatRequests || 0).toLocaleString("fa-IR")}</strong><p>برنامه روز + پیش‌نویس پاسخ · ماه جاری</p></div>
+          <div className="usage-card compact"><span className="eyebrow">تصویر ({aiUsage?.xai.imageModel || "grok-imagine-image"})</span><strong>{(aiUsage?.xai.imageGenerations || 0).toLocaleString("fa-IR")}</strong><p>هر تولید تصویر یک درخواست جدا</p></div>
+          <div className="usage-card compact"><span className="eyebrow">سقف ماهانه</span><strong>{(aiUsage?.xai.tokenBudget || 0).toLocaleString("fa-IR")}</strong><p>مانده {xaiRemaining.toLocaleString("fa-IR")} · {(aiUsage?.xai.tokenPercent || 0).toLocaleString("fa-IR")}٪ مصرف‌شده</p></div>
+        </div>
+      </article>
+
+      <article className="panel usage-section">
+        <div className="panel-head"><div><span className="eyebrow">Firecrawl</span><h3>جست‌وجو و Scrape</h3></div></div>
+        <div className="budget-bar-large firecrawl"><span style={{ width: `${aiUsage?.firecrawl.creditPercent || 0}%` }} /></div>
+        <div className="usage-grid">
+          <div className="usage-card compact"><span className="eyebrow">جست‌وجو</span><strong>{(aiUsage?.firecrawl.searches || 0).toLocaleString("fa-IR")}</strong><p>تحقیق، برنامه روز، verify</p></div>
+          <div className="usage-card compact"><span className="eyebrow">Scrape</span><strong>{(aiUsage?.firecrawl.scrapes || 0).toLocaleString("fa-IR")}</strong><p>منشن، پروفایل، انتشار</p></div>
+          <div className="usage-card compact"><span className="eyebrow">برآورد مصرف ماه</span><strong>{(aiUsage?.firecrawl.creditsUsedEstimate || 0).toLocaleString("fa-IR")}</strong><p>سقف داخلی {(aiUsage?.firecrawl.creditBudget || 0).toLocaleString("fa-IR")} · {(aiUsage?.firecrawl.creditPercent || 0).toLocaleString("fa-IR")}٪</p></div>
+          <div className="usage-card compact"><span className="eyebrow">اعتبار زنده Firecrawl</span><strong>{typeof firecrawlLiveRemaining === "number" ? firecrawlLiveRemaining.toLocaleString("fa-IR") : "—"}</strong><p>{typeof firecrawlLivePlan === "number" ? `از ${firecrawlLivePlan.toLocaleString("fa-IR")} اعتبار پلن` : "API live balance در دسترس نیست"}</p></div>
+        </div>
+        {(aiUsage?.firecrawl.failures || 0) > 0 && <p className="usage-footnote">{(aiUsage?.firecrawl.failures || 0).toLocaleString("fa-IR")} درخواست Firecrawl ناموفق در این ماه ثبت شده است.</p>}
+      </article>
+
+      <article className="panel budget-explanation"><strong>راهنمای سریع</strong><ol><li>X فقط برای منشن‌های اکانت رسمی مصرف می‌شود؛ رشد و محتوا از Firecrawl تغذیه می‌شوند.</li><li>Grok برای برنامه روز، پاسخ‌های پیشنهادی و تصویر پست به کار می‌رود.</li><li>Firecrawl برای تحقیق، scrape منشن، verify انتشار و کشف پست‌های رشد استفاده می‌شود.</li><li>اعداد Grok/Firecrawl روی سرور جمع می‌شوند؛ صورتحساب رسمی را در پنل xAI و Firecrawl هم چک کنید.</li></ol></article>
     </section>
   );
 }
@@ -940,7 +1389,7 @@ function SettingsView() {
   }, [checkXConnection]);
   return <section>
     <div className="settings-grid">
-      <article className="panel settings-card"><div className="panel-head"><div><span className="eyebrow">اتصال به X</span><h3>فقط پایش کامنت‌های خودمان</h3></div><span className="live-pill"><i/> قفل و فعال</span></div><div className="x-account-card"><span className="avatar">WT</span><div><small>اکانت رسمی پروژه</small><strong dir="ltr">{X_ACCOUNT_HANDLE}</strong></div><a href={X_ACCOUNT_URL} target="_blank" rel="noreferrer">مشاهده در X ↗</a></div><div className={`x-connection-status ${xConnection?.connected ? "connected" : xConnection?.needsCredit ? "credit" : "error"}`}><span><i />{xChecking ? "در حال بررسی تنظیمات امن…" : xConnection?.connected ? "کلیدها ثبت شده‌اند و فقط مسیر منشن‌ها مجاز است" : xConnection?.needsCredit ? "اعتبار X API نیاز به شارژ دارد" : xConnection?.error || "تنظیمات X هنوز کامل نشده است"}</span><button type="button" onClick={() => void checkXConnection()} disabled={xChecking}>{xChecking ? "بررسی…" : "بررسی تنظیمات"}</button></div><label>فاصله زمانی پایش<input value="هر ۲ دقیقه" readOnly aria-label="فاصله ثابت پایش"/></label><label>سقف قطعی Owned Reads<div className="input-prefix"><span>$</span><input value="5.00" readOnly aria-label="سقف ثابت پنج دلار"/></div></label><div className="settings-note">این سیاست‌ها عمداً قفل هستند. فقط مسیر <code>GET /2/users/:id/mentions</code> مجاز است و شناسه آخرین منشن برای جلوگیری از خواندن عمدی موارد قدیمی ذخیره می‌شود.</div></article>
+      <article className="panel settings-card"><div className="panel-head"><div><span className="eyebrow">اتصال به X</span><h3>فقط پایش کامنت‌های خودمان</h3></div><span className="live-pill"><i/> قفل و فعال</span></div><div className="x-account-card"><span className="avatar">WT</span><div><small>اکانت رسمی پروژه</small><strong dir="ltr">{X_ACCOUNT_HANDLE}</strong></div><a href={X_ACCOUNT_URL} target="_blank" rel="noreferrer">مشاهده در X ↗</a></div><div className={`x-connection-status ${xConnection?.connected ? "connected" : "error"}`}><span><i />{xChecking ? "در حال بررسی تنظیمات امن…" : xConnection?.connected ? "کلیدها ثبت شده‌اند و فقط مسیر منشن‌ها مجاز است" : xConnection?.error || "تنظیمات X هنوز کامل نشده است"}</span><button type="button" onClick={() => void checkXConnection()} disabled={xChecking}>{xChecking ? "بررسی…" : "بررسی تنظیمات"}</button></div><label>فاصله زمانی پایش<input value="هر ۲ دقیقه" readOnly aria-label="فاصله ثابت پایش"/></label><label>سقف قطعی Owned Reads<div className="input-prefix"><span>$</span><input value="5.00" readOnly aria-label="سقف ثابت پنج دلار"/></div></label><div className="settings-note">این سیاست‌ها عمداً قفل هستند. فقط مسیر <code>GET /2/users/:id/mentions</code> مجاز است و شناسه آخرین منشن برای جلوگیری از خواندن عمدی موارد قدیمی ذخیره می‌شود.</div></article>
       <article className="panel settings-card"><div className="panel-head"><div><span className="eyebrow">قوانین اجباری کانتکست</span><h3>دانش پروژه + Firecrawl</h3></div><span className="live-pill"><i/> فعال</span></div><label className="check-row"><input type="checkbox" checked readOnly/><span><strong>ارجاع پاسخ‌های کم‌اطمینان</strong><small>اطمینان کمتر از ۸۲٪ هرگز سبز نمی‌شود</small></span></label><label className="check-row"><input type="checkbox" checked readOnly/><span><strong>بررسی لینک‌ها و ادعاهای خارجی</strong><small>کانتکست عمومی روز با Firecrawl؛ حقیقت محصول از فایل پروژه</small></span></label><label className="check-row"><input type="checkbox" checked readOnly/><span><strong>ممنوعیت ادعای بدون منبع</strong><small>شبکه، قابلیت، عدد، همکاری و زمان عرضه باید سند داشته باشد</small></span></label><div className="settings-note">این گزینه‌ها نمایشی یا قابل خاموش‌کردن نیستند؛ مستقیماً در منطق تولید پاسخ و برنامه روز اعمال می‌شوند.</div></article>
     </div>
     <div className="settings-savebar"><div><strong>سیاست عملیاتی امن</strong><span>تغییر این محدودیت‌ها نیازمند تغییر و بازبینی کد است؛ اپراتور نمی‌تواند تصادفی آن‌ها را خاموش کند.</span></div><span className="sent-chip">✓ اعمال‌شده در موتور</span></div>
@@ -950,7 +1399,8 @@ function SettingsView() {
 export default function DashboardClient() {
   const [view, setView] = useState<View>("overview");
   const [targetView, setTargetView] = useState<View>("overview");
-  const [seconds, setSeconds] = useState(78);
+  const [pollSecondsLeft, setPollSecondsLeft] = useState(120);
+  const nextPollAtRef = useRef(Date.now() + 120_000);
   const [mobileNav, setMobileNav] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -961,9 +1411,11 @@ export default function DashboardClient() {
   const transitionTimers = useRef<number[]>([]);
   const sentReplies = useStoredIds("wallet-social-sent-replies-live-v4");
   const sentPosts = useStoredIds("wallet-social-sent-posts-live-v4");
+  const interactionRecords = useInteractionRecords("wallet-social-interaction-records-live-v1");
   const managedReplies = useStoredCollection<ReplyItem>("wallet-social-reply-items-live-v4", replies);
   const managedContent = useStoredCollection<ContentItem>("wallet-social-content-items-live-v4", contentItems);
   const dailyManager = useDailyManagerPlan();
+  const agentSignalsState = useAgentSignals();
   const setManagedContent = managedContent.setItems;
   const setManagedReplies = managedReplies.setItems;
 
@@ -985,6 +1437,8 @@ export default function DashboardClient() {
       const locallyEdited = current.find((candidate) => candidate.id === item.id);
       return locallyEdited ? { ...item, answer: locallyEdited.answer, answerTranslation: locallyEdited.answerTranslation } : item;
     }));
+    nextPollAtRef.current = Date.now() + 120_000;
+    setPollSecondsLeft(120);
     return payload.replies?.length || 0;
   }, [setManagedReplies]);
 
@@ -1052,13 +1506,15 @@ export default function DashboardClient() {
       ];
     };
 
-    const timer = window.setInterval(() => setSeconds((value) => value <= 0 ? 119 : value - 1), 1000);
+    const pollTimer = window.setInterval(() => {
+      setPollSecondsLeft(Math.max(0, Math.ceil((nextPollAtRef.current - Date.now()) / 1000)));
+    }, 1000);
     const loadingTimer = window.setTimeout(() => setIsLoading(false), 950);
     window.addEventListener("popstate", handlePopState);
     return () => {
       window.removeEventListener("popstate", handlePopState);
       window.clearTimeout(routeInitTimer);
-      window.clearInterval(timer);
+      window.clearInterval(pollTimer);
       window.clearTimeout(loadingTimer);
       transitionTimers.current.forEach((item) => window.clearTimeout(item));
     };
@@ -1101,7 +1557,8 @@ export default function DashboardClient() {
         syncInbox(),
         new Promise((resolve) => window.setTimeout(resolve, 520)),
       ]);
-      setSeconds(119);
+      nextPollAtRef.current = Date.now() + 120_000;
+      setPollSecondsLeft(120);
       setLastRefreshAt(new Date().toLocaleTimeString("fa-IR", { timeZone: "Asia/Tehran", hour: "2-digit", minute: "2-digit", second: "2-digit" }));
       setRefreshNotice(`داده‌های زنده تازه شد · ${Number(replyCount).toLocaleString("fa-IR")} پاسخ در صندوق`);
     } catch (reason) {
@@ -1113,7 +1570,7 @@ export default function DashboardClient() {
       window.setTimeout(() => setRefreshNotice(""), 6000);
     }
   };
-  const time = `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+  const time = `${String(Math.floor(pollSecondsLeft / 60)).padStart(2, "0")}:${String(pollSecondsLeft % 60).padStart(2, "0")}`;
   const logout = async () => {
     if (loggingOut) return;
     setLoggingOut(true);
@@ -1130,7 +1587,7 @@ export default function DashboardClient() {
         <div className="brand"><div className="brand-mark" aria-hidden="true"><strong>WT</strong></div><div><strong>والت سوشال</strong><small>مرکز مدیریت شبکه اجتماعی</small></div></div>
         <nav className="navigation">
           {navGroups.map((group) => {
-            const links = group.items.map((item) => <button key={item.id} className={`nav-link ${targetView === item.id ? "active" : ""} ${transitionPhase !== "idle" && targetView === item.id ? "pending" : ""}`} onClick={() => changeView(item.id)}><span className="nav-icon">{item.icon}</span><span>{item.label}</span>{item.badge && <b>{item.badge}</b>}</button>);
+            const links = group.items.map((item) => <button key={item.id} className={`nav-link ${targetView === item.id ? "active" : ""} ${transitionPhase !== "idle" && targetView === item.id ? "pending" : ""}`} onClick={() => changeView(item.id)}><span className="nav-icon">{item.icon}</span><span>{item.label}</span></button>);
             return "collapsible" in group && group.collapsible ? <details className="nav-group manager-nav" key={group.label}><summary>{group.label}<span>⌄</span></summary>{links}</details> : <div className="nav-group" key={group.label}><div className="nav-label">{group.label}</div>{links}</div>;
           })}
         </nav>
@@ -1143,16 +1600,16 @@ export default function DashboardClient() {
         <header className="topbar"><div className="topbar-left"><button className="menu-button" onClick={() => setMobileNav(true)} aria-label="بازکردن منو">☰</button><div className="view-heading" key={view}><div className="title-line"><h1>{viewMeta[view].title}</h1><span className="system-pill"><i/> آماده کار</span></div><p>{viewMeta[view].sub}</p></div></div><div className="topbar-actions">{lastRefreshAt && <small className="refresh-meta" role="status">آخرین تازه‌سازی {lastRefreshAt}</small>}<button className={`btn quiet refresh-button ${refreshing ? "spinning" : ""}`} onClick={() => void refreshView()} disabled={refreshing}><span aria-hidden="true">↻</span> {refreshing ? "در حال دریافت…" : "تازه‌سازی"}</button><button className="logout-button" onClick={() => void logout()} disabled={loggingOut} aria-label="خروج از داشبورد"><span aria-hidden="true">↪</span><b>{loggingOut ? "در حال خروج" : "خروج"}</b></button></div></header>
         <div className={`content content-stage ${transitionPhase === "leaving" ? "is-leaving" : ""}`} aria-busy={isLoading || transitionPhase !== "idle"}>
           {(isLoading || transitionPhase === "loading") ? <ViewSkeleton /> : <div className="view-enter" key={view}>
-            {view === "overview" && <Overview onNavigate={changeView} manager={dailyManager}/>}
+            {view === "overview" && <Overview onNavigate={changeView} manager={dailyManager} agentSignals={agentSignalsState.signals}/>}
             {view === "strategy" && <StrategyView onNavigate={changeView} plan={dailyManager.plan}/>}
             {view === "tasks" && <TasksView onNavigate={changeView} plan={dailyManager.plan}/>}
             {view === "creative" && <CreativeView onNavigate={changeView} plan={dailyManager.plan} onGenerate={dailyManager.regenerate}/>}
-            {view === "growth" && <GrowthView plan={dailyManager.plan}/>}
+            {view === "growth" && <GrowthView plan={dailyManager.plan} interactionRecords={interactionRecords} agentSignals={agentSignalsState.signals}/>}
             {view === "replies" && <RepliesView replyItems={managedReplies.items} onRepliesChange={managedReplies.setItems} sentIds={sentReplies.ids} onMarkSent={sentReplies.mark}/>}
             {view === "content" && <ContentView content={managedContent.items} onContentChange={managedContent.setItems} sentIds={sentPosts.ids} onMarkSent={sentPosts.mark} onUnmarkSent={sentPosts.unmark} onRetryImages={() => void dailyManager.retryImages()}/>}
-            {view === "sent" && <SentView replyIds={sentReplies.ids} postIds={sentPosts.ids} replyItems={managedReplies.items} content={managedContent.items}/>}
+            {view === "sent" && <SentView replyIds={sentReplies.ids} postIds={sentPosts.ids} replyItems={managedReplies.items} content={managedContent.items} interactions={interactionRecords.records}/>}
             {view === "telegram" && <TelegramView/>}
-            {view === "research" && <ResearchView onGenerate={dailyManager.regenerate}/>}
+            {view === "research" && <ResearchView onGenerate={dailyManager.regenerate} researchBridge={agentSignalsState.signals?.researchBridge || null}/>}
             {view === "budget" && <BudgetView/>}
             {view === "settings" && <SettingsView/>}
           </div>}
@@ -1160,7 +1617,7 @@ export default function DashboardClient() {
       </main>
       {refreshNotice && <div className="toast" role="status" aria-live="polite">{refreshNotice}</div>}
       <nav className="mobile-bottom-nav" aria-label="دسترسی سریع موبایل">
-        {[{ id: "overview" as View, icon: "⌂", label: "امروز" }, { id: "content" as View, icon: "۱", label: "پست" }, { id: "replies" as View, icon: "۲", label: "پاسخ" }, { id: "tasks" as View, icon: "✓", label: "کارها" }].map((item) => <button key={item.id} className={`${targetView === item.id ? "active" : ""} ${transitionPhase !== "idle" && targetView === item.id ? "pending" : ""}`} onClick={() => changeView(item.id)}><span>{item.icon}</span><small>{item.label}</small></button>)}
+        {[{ id: "overview" as View, icon: "⌂", label: "امروز" }, { id: "content" as View, icon: "۱", label: "پست" }, { id: "replies" as View, icon: "۲", label: "پاسخ" }, { id: "growth" as View, icon: "۳", label: "رشد" }, { id: "tasks" as View, icon: "✓", label: "کارها" }].map((item) => <button key={item.id} className={`${targetView === item.id ? "active" : ""} ${transitionPhase !== "idle" && targetView === item.id ? "pending" : ""}`} onClick={() => changeView(item.id)}><span>{item.icon}</span><small>{item.label}</small></button>)}
       </nav>
     </div>
   );
