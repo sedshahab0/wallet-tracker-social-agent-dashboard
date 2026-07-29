@@ -1085,8 +1085,8 @@ function BudgetView() {
   const [aiUsage, setAiUsage] = useState<{
     month: string;
     updatedAt: string;
-    xai: { chatRequests: number; promptTokens: number; completionTokens: number; totalTokens: number; imageGenerations: number; tokenBudget: number; tokenPercent: number; model: string; imageModel: string };
-    firecrawl: { searches: number; scrapes: number; failures: number; creditsUsedEstimate: number; creditBudget: number; creditPercent: number; live: { remainingCredits?: number; planCredits?: number } | null };
+    xai: { chatRequests: number; promptTokens: number; completionTokens: number; totalTokens: number; imageGenerations: number; tokenBudget: number; tokensRemaining?: number; tokenPercent: number; model: string; imageModel: string };
+    firecrawl: { searches: number; scrapes: number; failures: number; creditsUsedEstimate: number; creditBudget: number; creditsRemainingEstimate?: number; creditPercent: number; live: { remainingCredits?: number; planCredits?: number } | null };
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -1122,6 +1122,10 @@ function BudgetView() {
   const remaining = Math.max(0, 4.99 - budgetUsed);
   const firecrawlLiveRemaining = aiUsage?.firecrawl.live?.remainingCredits;
   const firecrawlLivePlan = aiUsage?.firecrawl.live?.planCredits;
+  const xaiRemaining = aiUsage?.xai.tokensRemaining ?? Math.max(0, (aiUsage?.xai.tokenBudget || 0) - (aiUsage?.xai.totalTokens || 0));
+  const usageUpdatedLabel = aiUsage?.updatedAt
+    ? new Date(aiUsage.updatedAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+    : "";
 
   return (
     <section className="budget-layout">
@@ -1129,7 +1133,7 @@ function BudgetView() {
         <div>
           <span className="eyebrow">پایش مدیر · {aiUsage?.month || "ماه جاری"}</span>
           <h2>مصرف واقعی X، Grok و Firecrawl</h2>
-          <p>اعداد X از Poller منشن‌ها می‌آید. Grok و Firecrawl از هر درخواست موفق سمت سرور ثبت می‌شوند؛ اعتبار زنده Firecrawl در صورت دسترسی API نمایش داده می‌شود.</p>
+          <p>اعداد X از Poller منشن‌ها می‌آید. Grok و Firecrawl از هر درخواست موفق سمت سرور ثبت می‌شوند؛ اعتبار زنده Firecrawl در صورت دسترسی API نمایش داده می‌شود.{usageUpdatedLabel ? ` آخرین به‌روزرسانی AI: ${usageUpdatedLabel}.` : ""}</p>
           <button className="btn quiet" onClick={() => void loadUsage()} disabled={loading}>{loading ? "در حال دریافت…" : "بروزرسانی مصرف ↻"}</button>
         </div>
       </div>
@@ -1146,13 +1150,13 @@ function BudgetView() {
       </article>
 
       <article className="panel usage-section">
-        <div className="panel-head"><div><span className="eyebrow">Grok · xAI</span><h3>توکن‌های مدل {aiUsage?.xai.model || "grok-4.5"}</h3></div></div>
+        <div className="panel-head"><div><span className="eyebrow">Grok · xAI</span><h3>توکن‌های مدل {aiUsage?.xai.model || "grok-4.5"}</h3></div>{usageUpdatedLabel && <small>آخرین ثبت: {usageUpdatedLabel}</small>}</div>
         <div className="budget-bar-large grok"><span style={{ width: `${aiUsage?.xai.tokenPercent || 0}%` }} /></div>
         <div className="usage-grid">
           <div className="usage-card compact"><span className="eyebrow">توکن مصرف‌شده</span><strong>{(aiUsage?.xai.totalTokens || 0).toLocaleString("fa-IR")}</strong><p>ورودی {(aiUsage?.xai.promptTokens || 0).toLocaleString("fa-IR")} · خروجی {(aiUsage?.xai.completionTokens || 0).toLocaleString("fa-IR")}</p></div>
-          <div className="usage-card compact"><span className="eyebrow">درخواست چت</span><strong>{(aiUsage?.xai.chatRequests || 0).toLocaleString("fa-IR")}</strong><p>برنامه روز + پیش‌نویس پاسخ</p></div>
-          <div className="usage-card compact"><span className="eyebrow">تصویر ({aiUsage?.xai.imageModel || "grok-imagine"})</span><strong>{(aiUsage?.xai.imageGenerations || 0).toLocaleString("fa-IR")}</strong><p>هر تولید تصویر یک درخواست جدا</p></div>
-          <div className="usage-card compact"><span className="eyebrow">سقف ماهانه (تنظیم سرور)</span><strong>{(aiUsage?.xai.tokenBudget || 0).toLocaleString("fa-IR")}</strong><p>{(aiUsage?.xai.tokenPercent || 0).toLocaleString("fa-IR")}٪ از سقف داخلی</p></div>
+          <div className="usage-card compact"><span className="eyebrow">درخواست چت</span><strong>{(aiUsage?.xai.chatRequests || 0).toLocaleString("fa-IR")}</strong><p>برنامه روز + پیش‌نویس پاسخ · ماه جاری</p></div>
+          <div className="usage-card compact"><span className="eyebrow">تصویر ({aiUsage?.xai.imageModel || "grok-imagine-image"})</span><strong>{(aiUsage?.xai.imageGenerations || 0).toLocaleString("fa-IR")}</strong><p>هر تولید تصویر یک درخواست جدا</p></div>
+          <div className="usage-card compact"><span className="eyebrow">سقف ماهانه</span><strong>{(aiUsage?.xai.tokenBudget || 0).toLocaleString("fa-IR")}</strong><p>مانده {xaiRemaining.toLocaleString("fa-IR")} · {(aiUsage?.xai.tokenPercent || 0).toLocaleString("fa-IR")}٪ مصرف‌شده</p></div>
         </div>
       </article>
 

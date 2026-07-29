@@ -26,6 +26,9 @@ const memory: UsageState = {
   updatedAt: "",
 };
 
+/** Serialize all read-modify-write cycles so parallel Firecrawl/xAI calls cannot lose counters. */
+let mutationQueue: Promise<unknown> = Promise.resolve();
+
 function currentMonth() {
   return new Date().toISOString().slice(0, 7);
 }
@@ -48,18 +51,26 @@ function normalizeMonth(state: UsageState): UsageState {
   return { month, xai: emptyXai(), firecrawl: emptyFirecrawl(), updatedAt: state.updatedAt };
 }
 
+function mergeState(parsed: Partial<UsageState> | null | undefined): UsageState {
+  return normalizeMonth({
+    month: parsed?.month || memory.month || currentMonth(),
+    xai: { ...emptyXai(), ...(parsed?.xai || {}) },
+    firecrawl: { ...emptyFirecrawl(), ...(parsed?.firecrawl || {}) },
+    updatedAt: parsed?.updatedAt || memory.updatedAt || "",
+  });
+}
+
 export async function readUsageState(): Promise<UsageState> {
   try {
     const { readFile } = await import("node:fs/promises");
     const parsed = JSON.parse(await readFile(statePath(), "utf8")) as UsageState;
-    const merged = { ...memory, ...parsed, xai: { ...emptyXai(), ...parsed.xai }, firecrawl: { ...emptyFirecrawl(), ...parsed.firecrawl } };
-    const normalized = normalizeMonth(merged);
+    const normalized = mergeState(parsed);
     Object.assign(memory, normalized);
-    return { ...normalized };
+    return { ...normalized, xai: { ...normalized.xai }, firecrawl: { ...normalized.firecrawl } };
   } catch {
-    const normalized = normalizeMonth({ ...memory });
+    const normalized = mergeState(memory);
     Object.assign(memory, normalized);
-    return { ...normalized };
+    return { ...normalized, xai: { ...normalized.xai }, firecrawl: { ...normalized.firecrawl } };
   }
 }
 
@@ -76,17 +87,22 @@ async function writeUsageState(state: UsageState) {
 }
 
 async function mutateUsage(mutator: (state: UsageState) => void) {
-  const state = normalizeMonth(await readUsageState());
-  mutator(state);
-  state.updatedAt = new Date().toISOString();
-  await writeUsageState(state);
-  return state;
+  const run = mutationQueue.then(async () => {
+    const state = await readUsageState();
+    mutator(state);
+    state.updatedAt = new Date().toISOString();
+    await writeUsageState(state);
+    return { ...state, xai: { ...state.xai }, firecrawl: { ...state.firecrawl } };
+  });
+  mutationQueue = run.then(() => undefined, () => undefined);
+  return run;
 }
 
 export async function recordXaiChatUsage(usage: { promptTokens?: number; completionTokens?: number; totalTokens?: number }) {
-  const prompt = Math.max(0, usage.promptTokens || 0);
-  const completion = Math.max(0, usage.completionTokens || 0);
-  const total = Math.max(prompt + completion, usage.totalTokens || 0);
+  const prompt = Math.max(0, Math.round(Number(usage.promptTokens) || 0));
+  const completion = Math.max(0, Math.round(Number(usage.completionTokens) || 0));
+  const reportedTotal = Math.max(0, Math.round(Number(usage.totalTokens) || 0));
+  const total = Math.max(prompt + completion, reportedTotal);
   return mutateUsage((state) => {
     state.xai.chatRequests += 1;
     state.xai.promptTokens += prompt;
@@ -154,6 +170,7 @@ export async function getUsageSummary() {
   const firecrawlCreditsUsed = estimateFirecrawlCreditsUsed(state);
   const firecrawlBudget = firecrawlMonthlyCreditBudget();
   const xaiBudget = xaiMonthlyTokenBudget();
+  const tokensRemaining = Math.max(0, xaiBudget - state.xai.totalTokens);
   const liveFirecrawl = await fetchFirecrawlLiveCredits();
   return {
     month: state.month,
@@ -161,6 +178,7 @@ export async function getUsageSummary() {
     xai: {
       ...state.xai,
       tokenBudget: xaiBudget,
+      tokensRemaining,
       tokenPercent: Math.min(100, Math.round((state.xai.totalTokens / xaiBudget) * 100)),
       model: process.env.XAI_TEXT_MODEL?.trim() || "grok-4.5",
       imageModel: process.env.XAI_IMAGE_MODEL?.trim() || "grok-imagine-image",
@@ -169,6 +187,7 @@ export async function getUsageSummary() {
       ...state.firecrawl,
       creditsUsedEstimate: firecrawlCreditsUsed,
       creditBudget: firecrawlBudget,
+      creditsRemainingEstimate: Math.max(0, firecrawlBudget - firecrawlCreditsUsed),
       creditPercent: Math.min(100, Math.round((firecrawlCreditsUsed / firecrawlBudget) * 100)),
       live: liveFirecrawl,
     },

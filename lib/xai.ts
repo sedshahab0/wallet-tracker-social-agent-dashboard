@@ -50,6 +50,6 @@ export async function xaiChatCompletion(options: {
     promptTokens: payload.usage?.prompt_tokens,
     completionTokens: payload.usage?.completion_tokens,
     totalTokens: payload.usage?.total_tokens,
-  });
+  }).catch(() => undefined);
   return content;
 }

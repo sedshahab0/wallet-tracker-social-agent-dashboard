@@ -380,8 +380,12 @@ test("tracks Grok and Firecrawl usage for the manager budget page", async () => 
   assert.match(page, /\/api\/manager\/usage/);
   assert.match(page, /توکن مصرف‌شده/);
   assert.match(page, /اعتبار زنده Firecrawl/);
+  assert.match(page, /مانده \{xaiRemaining/);
+  assert.match(page, /tokensRemaining/);
   assert.match(exampleEnv, /XAI_MONTHLY_TOKEN_BUDGET=500000/);
   assert.match(exampleEnv, /FIRECRAWL_MONTHLY_CREDIT_BUDGET=3000/);
+  assert.match(usageTracker, /mutationQueue/);
+  assert.match(usageTracker, /tokensRemaining/);
 });
 
 test("ships phase 3 proactive agent modules and whale watcher cron", async () => {
