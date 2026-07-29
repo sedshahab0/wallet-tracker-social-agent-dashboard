@@ -66,53 +66,38 @@ type XConnection = {
 
 const X_ACCOUNT_HANDLE = "@wallettrackerH";
 const X_ACCOUNT_URL = "https://x.com/wallettrackerH";
-const SETTINGS_DEFAULTS = { polling: true, firecrawl: true, interval: "120", budget: "10.00", lowConfidence: true, externalClaims: true, importantAccounts: true };
+const SETTINGS_DEFAULTS = { polling: true, firecrawl: true, interval: "120", budget: "5.00", lowConfidence: true, externalClaims: true, importantAccounts: true };
 
 const navGroups = [
   {
-    label: "محیط کار",
+    label: "کارهای اپراتور · از بالا به پایین",
     items: [
-      { id: "overview" as View, icon: "⌂", label: "نمای کلی" },
-      { id: "replies" as View, icon: "↩", label: "صندوق پاسخ‌ها", badge: "۱۲" },
-      { id: "content" as View, icon: "≡", label: "صف محتوا", badge: "۷" },
-      { id: "sent" as View, icon: "✓", label: "تاریخچه ارسال" },
+      { id: "overview" as View, icon: "⌂", label: "امروز چه‌کار کنم؟" },
+      { id: "content" as View, icon: "۱", label: "پست آماده", badge: "۷" },
+      { id: "replies" as View, icon: "۲", label: "پاسخ‌های آماده", badge: "۱۲" },
+      { id: "tasks" as View, icon: "۳", label: "لیست کار امروز", badge: "۴" },
+      { id: "sent" as View, icon: "✓", label: "کارهای انجام‌شده" },
     ],
   },
   {
-    label: "برنامه‌ریزی برند",
+    label: "ابزارهای مدیر · اپراتور نیاز ندارد",
+    collapsible: true,
     items: [
-      { id: "strategy" as View, icon: "◫", label: "استراتژی و تقویم" },
-      { id: "tasks" as View, icon: "◉", label: "کارهای امروز", badge: "۶" },
+      { id: "strategy" as View, icon: "◫", label: "برنامه هفتگی" },
+      { id: "creative" as View, icon: "✦", label: "ساخت محتوای جدید" },
+      { id: "growth" as View, icon: "↗", label: "برنامه رشد" },
+      { id: "telegram" as View, icon: "➤", label: "تنظیم اعلان‌ها" },
+      { id: "research" as View, icon: "◇", label: "تحقیق زنده" },
+      { id: "budget" as View, icon: "▥", label: "اعتبار ۵ دلاری X" },
+      { id: "settings" as View, icon: "⚙", label: "تنظیمات فنی" },
     ],
-  },
-  {
-    label: "تولید و رشد",
-    items: [
-      { id: "creative" as View, icon: "✦", label: "استودیوی محتوا" },
-      { id: "growth" as View, icon: "↗", label: "رشد و تعامل" },
-    ],
-  },
-  {
-    label: "هماهنگی تیم",
-    items: [{ id: "telegram" as View, icon: "➤", label: "اعلان‌های تلگرام", badge: "۳" }],
-  },
-  {
-    label: "هوشمندی",
-    items: [
-      { id: "research" as View, icon: "◇", label: "پژوهش زنده" },
-      { id: "budget" as View, icon: "▥", label: "مصرف و بودجه" },
-    ],
-  },
-  {
-    label: "سیستم",
-    items: [{ id: "settings" as View, icon: "⚙", label: "تنظیمات" }],
   },
 ];
 
 const viewMeta: Record<View, { title: string; sub: string }> = {
-  overview: { title: "نمای کلی", sub: "مرکز زنده مدیریت محتوا و ارتباط با کاربران در X" },
+  overview: { title: "کارهای امروز", sub: "فقط از مرحله ۱ شروع کنید و دکمه نارنجی را بزنید." },
   strategy: { title: "استراتژی و تقویم", sub: "پلن ماهانه، موضوع‌های هفتگی و زمان دقیق اجرای روزانه" },
-  tasks: { title: "کارهای امروز", sub: "قدم‌های روشن اپراتور؛ بدون نیاز به دانش فنی یا برندینگ" },
+  tasks: { title: "لیست کار امروز", sub: "هر کار را انجام دهید، سپس تیک همان ردیف را بزنید." },
   creative: { title: "استودیوی محتوا", sub: "ساخت بسته یکپارچه متن، ترجمه، تصویر و زمان انتشار" },
   growth: { title: "رشد و تعامل", sub: "اکانت‌ها، گفتگوها و پاسخ‌های هدفمند با کنترل ضداسپم" },
   replies: { title: "صندوق پاسخ‌ها", sub: "پاسخ‌های چندزبانه را پیش از ارسال توسط اپراتور بررسی کنید." },
@@ -120,7 +105,7 @@ const viewMeta: Record<View, { title: string; sub: string }> = {
   sent: { title: "تاریخچه ارسال", sub: "همه پست‌ها و پاسخ‌هایی که اپراتور انتشار آن‌ها را تأیید کرده است." },
   telegram: { title: "اعلان‌های تلگرام", sub: "هشدارها، لینک‌های مستقیم و قوانین اطلاع‌رسانی گروه اپراتورها" },
   research: { title: "پژوهش زنده", sub: "سیگنال‌های منتخب Firecrawl برای تصمیم‌گیری محتوایی" },
-  budget: { title: "مصرف و بودجه", sub: "هزینه X API و استفاده انتخابی از Firecrawl را کنترل کنید." },
+  budget: { title: "اعتبار X برای خواندن کامنت‌ها", sub: "تمام ۵ دلار فقط برای Owned Reads منشن‌های اکانت اصلی رزرو شده است." },
   settings: { title: "تنظیمات", sub: "فاصله پایش، قوانین تأیید و محدودیت‌های هزینه را مدیریت کنید." },
 };
 
@@ -252,7 +237,7 @@ const telegramAlerts = [
   { id: "t-1", icon: "✦", tone: "ready", title: "پست جدید آماده انتشار است", body: "پست «رهگیری کیف‌پول‌های سولانا» بررسی شده؛ متن را از داشبورد کپی کنید.", time: "۲ دقیقه پیش", cta: "دیدن پست", target: "content" as View },
   { id: "t-2", icon: "↩", tone: "ready", title: "پاسخ اسپانیایی آماده است", body: "@carlos_chain درباره پشتیبانی سولانا پرسیده است. پاسخ هم‌زبان با ریسک پایین آماده شد.", time: "۷ دقیقه پیش", cta: "دیدن پاسخ", target: "replies" as View },
   { id: "t-3", icon: "!", tone: "danger", title: "ارجاع امنیتی به مدیر", body: "یک پیام شامل درخواست کلید خصوصی شناسایی شد؛ انتشار خودکار پاسخ مسدود است.", time: "۱۲ دقیقه پیش", cta: "بررسی فوری", target: "replies" as View },
-  { id: "t-4", icon: "$", tone: "warning", title: "بودجه به ۴۲٪ رسیده است", body: "۴٫۲۰ دلار از سقف ۱۰ دلار مصرف شده؛ هشدار بعدی در ۵ دلار ارسال می‌شود.", time: "۱ ساعت پیش", cta: "دیدن بودجه", target: "budget" as View },
+  { id: "t-4", icon: "$", tone: "warning", title: "محافظ اعتبار X فعال است", body: "۵ دلار فقط برای خواندن منشن‌های جدید رزرو شده و در ۵۰٪ و ۸۰٪ هشدار می‌گیرید.", time: "امروز", cta: "دیدن اعتبار", target: "budget" as View },
 ];
 
 const defaultResearchItems: ResearchItem[] = [
@@ -356,98 +341,32 @@ function ViewSkeleton() {
 
 function Overview({ onNavigate }: { onNavigate: (view: View) => void }) {
   return (
-    <>
-      <section className="operation-banner">
-        <div>
-          <span className="eyebrow">وضعیت امروز</span>
-          <h2>میز مدیریت شبکه اجتماعی فعال است.</h2>
-          <p>پایش Owned Reads بدون مشکل کار می‌کند و سه پاسخ چندزبانه برای تصمیم اپراتور آماده است.</p>
-        </div>
-        <div className="banner-actions">
-          <button className="btn quiet" onClick={() => onNavigate("strategy")}>دیدن برنامه امروز</button>
-          <button className="btn accent" onClick={() => onNavigate("tasks")}>شروع کارهای اپراتور <span>←</span></button>
-        </div>
-      </section>
+    <section className="operator-home">
+      <div className="operator-welcome panel">
+        <div><span className="eyebrow">راهنمای مستقیم اپراتور</span><h2>امروز فقط این سه مرحله را انجام بده.</h2><p>نیازی نیست چیزی درباره توییتر، پروژه یا استراتژی بدانی. از مرحله ۱ شروع کن و هرجا دکمه نارنجی دیدی، همان را بزن.</p></div>
+        <div className="today-clock"><span>زمان تقریبی کل</span><strong>۲۵ دقیقه</strong><small>در سه نوبت کوتاه</small></div>
+      </div>
 
-      <section className="kpi-grid">
-        <article className="kpi-card">
-          <div className="kpi-top"><span>پاسخ‌های منتظر</span><i className="signal cyan" /></div>
-          <strong>۱۲</strong><small><b>۳ مورد مهم</b> · قدیمی‌ترین ۱۱ دقیقه</small>
+      <div className="operator-journey">
+        <article className="operator-step panel lift-card current">
+          <span className="step-number">۱</span><div className="step-copy"><small>اول این کار را انجام بده</small><h3>پست آماده را منتشر کن</h3><p>متن آماده را کپی کن، تصویر را بردار و در اکانت X قرار بده. بعد دکمه «منتشر کردم» را بزن.</p><div className="step-warning">اگر پست برچسب زرد داشت، فعلاً منتشر نکن.</div></div><button className="btn accent" onClick={() => onNavigate("content")}>رفتن به پست آماده ←</button>
         </article>
-        <article className="kpi-card">
-          <div className="kpi-top"><span>پیش‌نویس‌های محتوا</span><i className="signal blue" /></div>
-          <strong>۷</strong><small><b>۴ مورد کم‌ریسک</b> · ۲ مورد نیازمند بررسی</small>
+        <article className="operator-step panel lift-card">
+          <span className="step-number">۲</span><div className="step-copy"><small>بعد از انتشار پست</small><h3>پاسخ‌های آماده را ارسال کن</h3><p>پاسخ پیشنهادی را کپی کن و زیر همان کامنت در X بگذار. پاسخ به زبان خود کاربر آماده شده است.</p><div className="step-safe">پاسخ سبز را می‌توانی ارسال کنی؛ پاسخ زرد را به مدیر نشان بده.</div></div><button className="btn quiet" onClick={() => onNavigate("replies")}>بازکردن صندوق پاسخ‌ها ←</button>
         </article>
-        <article className="kpi-card">
-          <div className="kpi-top"><span>میانه زمان پاسخ</span><i className="signal violet" /></div>
-          <strong>۶ دقیقه</strong><small><b>۱۸٪ بهتر</b> از هفته گذشته</small>
+        <article className="operator-step panel lift-card">
+          <span className="step-number">۳</span><div className="step-copy"><small>در پایان روز</small><h3>کارهای انجام‌شده را تیک بزن</h3><p>چهار کار کوتاه امروز را ببین و هرکدام که تمام شده تیک بزن. کار دیگری لازم نیست.</p></div><button className="btn quiet" onClick={() => onNavigate("tasks")}>دیدن لیست امروز ←</button>
         </article>
-        <article className="kpi-card budget-kpi">
-          <div className="kpi-top"><span>بودجه X API</span><i className="signal amber" /></div>
-          <strong>۴٫۲۰ دلار <em>از ۱۰ دلار</em></strong>
-          <div className="mini-progress"><span style={{ width: "42%" }} /></div>
-          <small>۴۲٪ مصرف شده · هشدار اول در ۵ دلار</small>
-        </article>
-      </section>
+      </div>
 
-      <section className="main-grid">
-        <article className="panel reply-preview span-2">
-          <div className="panel-head">
-            <div><span className="eyebrow">بررسی انسانی</span><h3>پاسخ‌های مهم</h3><p>پاسخ هم‌زبان کاربر، همراه با ترجمه فارسی برای اپراتور</p></div>
-            <button className="text-btn" onClick={() => onNavigate("replies")}>مشاهده همه پاسخ‌ها ←</button>
-          </div>
-          <div className="reply-rows">
-            {replies.map((reply) => (
-              <button className="reply-row" key={reply.id} onClick={() => onNavigate("replies")}> 
-                <span className="avatar">{reply.avatar}</span>
-                <span className="reply-copy"><strong>{reply.handle}</strong><small>{reply.original}</small></span>
-                <span className="language-chip">{reply.language}</span>
-                <RiskBadge risk={reply.risk} />
-                <time>{reply.age}</time>
-                <span className="row-arrow">‹</span>
-              </button>
-            ))}
-          </div>
-        </article>
+      <div className="simple-status panel">
+        <div><i className="status-dot"/><span><strong>کامنت‌ها هر ۲ دقیقه بررسی می‌شوند</strong><small>کامنت جدید خودکار وارد صندوق پاسخ‌ها می‌شود.</small></span></div>
+        <div><i className="budget-lock">$</i><span><strong>۵ دلار فقط برای خواندن کامنت‌ها</strong><small>هزینه هر منشن جدید: ۰٫۰۰۱ دلار؛ جست‌وجو و انتشار از این اعتبار استفاده نمی‌کند.</small></span></div>
+        <div><i className="telegram-dot">➤</i><span><strong>تلگرام به اپراتور خبر می‌دهد</strong><small>برای هر کار آماده، لینک مستقیم همین صفحه ارسال می‌شود.</small></span></div>
+      </div>
 
-        <article className="panel polling-panel">
-          <div className="panel-head"><div><span className="eyebrow">Owned Reads</span><h3>وضعیت پایش</h3></div><span className="live-pill"><i /> فعال</span></div>
-          <div className="poll-visual"><div className="radar"><span /><span /><i /></div><strong>هر ۲ دقیقه</strong><small>بررسی بعدی تا ۰۱:۱۸</small></div>
-          <div className="stat-list">
-            <div><span>آخرین بررسی موفق</span><strong>۴۲ ثانیه قبل</strong></div>
-            <div><span>منشن‌های یکتای امروز</span><strong>۳۸</strong></div>
-            <div><span>جلوگیری از خواندن تکراری</span><strong>۱۲۴</strong></div>
-          </div>
-        </article>
-      </section>
-
-      <section className="lower-grid">
-        <article className="panel agent-panel">
-          <div className="panel-head"><div><span className="eyebrow">گردش‌کار عامل</span><h3>عامل‌های فعال</h3></div></div>
-          <div className="agent-list">
-            <div><i className="agent-icon cyan">◎</i><span><strong>تشخیص زبان و هدف</strong><small>۱۲ مورد دسته‌بندی شده</small></span><b>فعال</b></div>
-            <div><i className="agent-icon blue">✦</i><span><strong>نویسنده پاسخ</strong><small>۳ پیش‌نویس ساخته شده</small></span><b>فعال</b></div>
-            <div><i className="agent-icon violet">◇</i><span><strong>کنترل ریسک و قوانین</strong><small>۱ مورد ارجاع شده</small></span><b>فعال</b></div>
-            <div><i className="agent-icon amber">F</i><span><strong>کانتکست Firecrawl</strong><small>۲ بررسی انتخابی</small></span><b>آماده‌به‌کار</b></div>
-          </div>
-        </article>
-
-        <article className="panel budget-panel">
-          <div className="panel-head"><div><span className="eyebrow">کنترل هزینه</span><h3>بودجه ماهانه</h3></div><button className="text-btn" onClick={() => onNavigate("budget")}>جزئیات ←</button></div>
-          <div className="budget-ring"><div><strong>۴۲٪</strong><small>۴٫۲۰ دلار مصرف</small></div></div>
-          <div className="thresholds"><span><i className="line half" />هشدار ۵۰٪ · ۵ دلار</span><span><i className="line danger" />هشدار ۸۰٪ · ۸ دلار</span></div>
-        </article>
-
-        <article className="panel intelligence-panel">
-          <div className="panel-head"><div><span className="eyebrow">Firecrawl</span><h3>سیگنال‌های منتخب</h3></div><button className="text-btn" onClick={() => onNavigate("research")}>پژوهش ←</button></div>
-          <div className="signal-list">
-            <div><span className="source-mark">X</span><span><strong>افزایش گفتگو درباره امنیت کیف‌پول</strong><small>۱۸ پست عمومی مرتبط · ۲۴ ساعت</small></span></div>
-            <div><span className="source-mark">R</span><span><strong>رقیب از شبکه Base پشتیبانی کرد</strong><small>نسخه منتشرشده تأیید شد · ۳ ساعت</small></span></div>
-            <div><span className="source-mark">N</span><span><strong>فرصت تولید محتوا درباره سولانا</strong><small>۶ منبع معتبر · ۷ ساعت</small></span></div>
-          </div>
-        </article>
-      </section>
-    </>
+      <details className="manager-shortcuts panel"><summary>ابزارهای مدیر را نشان بده <small>اپراتور معمولاً به این قسمت نیاز ندارد</small></summary><div>{[["strategy","برنامه هفتگی"],["creative","ساخت محتوای جدید"],["growth","برنامه رشد"],["budget","کنترل اعتبار X"],["settings","تنظیمات فنی"]].map(([target,label]) => <button className="btn quiet" key={target} onClick={() => onNavigate(target as View)}>{label}</button>)}</div></details>
+    </section>
   );
 }
 
@@ -845,12 +764,10 @@ function StrategyView({ onNavigate }: { onNavigate: (view: View) => void }) {
 }
 
 const dailyTaskSeed = [
-  { id: 'check-sources', time: '۱۰:۳۰', title: 'بررسی دو منبع خبر امروز', detail: 'روی «پژوهش زنده» برو، منابع اصلی را باز کن و فقط در صورت تطابق دو منبع تأیید کن.', target: 'research' as View, priority: 'مهم' },
-  { id: 'approve-post', time: '۱۱:۱۵', title: 'بازبینی پست آموزشی', detail: 'تیتر، ادعای محصول و تصویر ۱۶:۹ را بررسی کن؛ سپس متن را برای انتشار کپی کن.', target: 'creative' as View, priority: 'مهم' },
-  { id: 'publish-post', time: '۱۱:۳۰', title: 'انتشار پست در X', detail: 'متن و تصویر تأییدشده را منتشر کن و در صف محتوا دکمه «منتشر کردم» را بزن.', target: 'content' as View, priority: 'زمان‌دار' },
-  { id: 'reply-users', time: '۱۴:۰۰', title: 'پاسخ به کاربران منتظر', detail: 'پاسخ هم‌زبان را کپی کن؛ موارد زرد را بدون تأیید مدیر منتشر نکن.', target: 'replies' as View, priority: '۱۲ مورد' },
-  { id: 'target-talk', time: '۱۸:۴۵', title: 'یک تعامل هدفمند', detail: 'یکی از گفتگوهای پیشنهادی را باز کن، متن اختصاصی را بخوان و فقط در صورت ارتباط واقعی ارسال کن.', target: 'growth' as View, priority: 'رشد' },
-  { id: 'daily-review', time: '۲۱:۳۰', title: 'ثبت نتیجه روز', detail: 'تعداد بازدید پروفایل، پاسخ‌های واقعی و کلیک‌ها را ثبت کن تا برنامه فردا اصلاح شود.', target: 'strategy' as View, priority: 'یادگیری' },
+  { id: 'publish-post', time: '۱۱:۳۰', title: 'پست آماده را منتشر کن', detail: 'دکمه «رفتن به بخش» را بزن، متن و تصویر را کپی کن، در X منتشر کن و بعد «منتشر کردم» را بزن.', target: 'content' as View, priority: 'مرحله ۱' },
+  { id: 'reply-users', time: '۱۴:۰۰', title: 'به پاسخ‌های سبز جواب بده', detail: 'پاسخ سبز را کپی و زیر همان کامنت بگذار. پاسخ زرد را ارسال نکن و به مدیر نشان بده.', target: 'replies' as View, priority: 'مرحله ۲' },
+  { id: 'check-again', time: '۱۸:۰۰', title: 'صندوق پاسخ‌ها را دوباره ببین', detail: 'اگر مورد تازه‌ای آمده بود همان کار مرحله قبل را تکرار کن؛ اگر خالی بود کاری لازم نیست.', target: 'replies' as View, priority: 'مرحله ۳' },
+  { id: 'daily-review', time: '۲۱:۳۰', title: 'مطمئن شو همه کارها ثبت شده‌اند', detail: 'صفحه کارهای انجام‌شده را باز کن و مطمئن شو پست و پاسخ‌هایی که فرستادی در لیست هستند.', target: 'sent' as View, priority: 'پایان روز' },
 ];
 
 function TasksView({ onNavigate }: { onNavigate: (view: View) => void }) {
@@ -890,7 +807,7 @@ function GrowthView() {
     { id:'whales', topic:'تحلیل فعالیت نهنگ‌ها', query:'on-chain whale wallet tracking analytics', reason:'دسترسی به مخاطب معامله‌گر و پژوهشگر', comment:'Tracking a large transfer is only the first signal. Counterparties, repeated behavior, and token concentration are what turn a movement into something worth investigating.' },
   ];
   return <section className="growth-view">
-    <div className="growth-hero panel"><div><span className="eyebrow">رشد باکیفیت، نه اسپم</span><h2>سه تعامل معنی‌دار بهتر از سی کامنت تکراری است.</h2><p>عامل موضوع و متن را پیشنهاد می‌دهد؛ اپراتور پست واقعی را می‌بیند و فقط پس از اطمینان منتشر می‌کند.</p></div><div className="api-gate"><i>!</i><div><strong>کشف زنده پست‌ها منتظر اعتبار X API است</strong><small>پس از شارژ ۱۰ دلار، شناسه و لینک دقیق پست‌ها از API رسمی وارد می‌شود.</small></div></div></div>
+    <div className="growth-hero panel"><div><span className="eyebrow">رشد باکیفیت، نه اسپم</span><h2>سه تعامل معنی‌دار بهتر از سی کامنت تکراری است.</h2><p>عامل موضوع و متن را پیشنهاد می‌دهد؛ اپراتور پست واقعی را می‌بیند و فقط پس از اطمینان منتشر می‌کند.</p></div><div className="api-gate"><i>✓</i><div><strong>اعتبار X برای رشد مصرف نمی‌شود</strong><small>برای حفظ ۵ دلار Owned Reads، پیدا کردن پست هدف با لینک جست‌وجوی دستی انجام می‌شود.</small></div></div></div>
     <div className="growth-layout"><div className="opportunity-list">{opportunities.map((item) => <article className="panel opportunity-card lift-card" key={item.id}><header><div><span className="eyebrow">فرصت تعامل</span><h3>{item.topic}</h3></div><span className="match-score">۹{item.id === 'security' ? '۴' : item.id === 'solana' ? '۰' : '۲'}٪</span></header><div className="target-query"><small>عبارت کشف پست هدف</small><code dir="ltr">{item.query}</code></div><p>{item.reason}</p><blockquote dir="ltr">{item.comment}</blockquote><footer><a className="btn quiet" href={`https://x.com/search?q=${encodeURIComponent(item.query)}&src=typed_query&f=live`} target="_blank" rel="noreferrer">جست‌وجوی دستی در X ↗</a><button className="btn accent" onClick={() => copy(item.id,item.comment)}>{copied === item.id ? '✓ کپی شد' : 'کپی کامنت پیشنهادی'}</button></footer></article>)}</div>
       <aside className="growth-side"><article className="panel guard-card"><span className="eyebrow">گارد ضداسپم</span><h3>قبل از هر تعامل</h3><ul><li><b>ارتباط:</b> پست باید واقعاً درباره موضوع محصول باشد.</li><li><b>اصالت:</b> شباهت با کامنت‌های قبلی کمتر از ۷۲٪.</li><li><b>تعداد:</b> حداکثر ۳ تا ۵ تعامل دستی باکیفیت در روز.</li><li><b>توقف:</b> پاسخ تکراری، لایک خودکار و فالو انبوه ممنوع.</li></ul></article><article className="panel target-accounts"><span className="eyebrow">سبد اکانت هدف</span><h3>چه کسانی ارزش رصد دارند؟</h3>{[['پژوهشگران امنیت وب۳','اعتماد و آموزش'],['تحلیل‌گران داده آن‌چین','اثبات کاربرد'],['اکوسیستم‌های Solana و EVM','کشف مخاطب'],['سازندگان ابزار معامله‌گری','همکاری محصول']].map((item) => <div key={item[0]}><span>◎</span><p><strong>{item[0]}</strong><small>{item[1]}</small></p><b>روزانه</b></div>)}</article></aside></div>
   </section>;
@@ -899,13 +816,14 @@ function GrowthView() {
 function BudgetView() {
   return (
     <section>
-      <div className="budget-hero panel"><div><span className="eyebrow">تیر ۱۴۰۵</span><h2>۴٫۲۰ دلار از ۱۰ دلار</h2><p>با روند فعلی، مصرف پایان ماه حدود ۶٫۷۸ دلار خواهد بود.</p></div><div className="budget-bar-large"><span style={{width:"42%"}}/><i className="mark half">۵۰٪</i><i className="mark high">۸۰٪</i></div></div>
+      <div className="budget-hero panel"><div><span className="eyebrow">محافظ هزینه فعال</span><h2>۵ دلار فقط برای خواندن کامنت‌های جدید</h2><p>هیچ جست‌وجو، انتشار پست، تولید محتوا یا درخواست Firecrawl از اعتبار X استفاده نمی‌کند.</p></div><div className="budget-bar-large reserved"><span style={{width:"0%"}}/><i className="mark half">هشدار ۲٫۵۰ دلار</i><i className="mark high">هشدار ۴ دلار</i></div></div>
       <div className="usage-grid">
-        <article className="panel usage-card"><span className="eyebrow">X Owned Reads</span><strong>۲٫۸۴ دلار</strong><p>۲٬۸۴۰ منشن یکتا</p><small>۰٫۰۰۱ دلار برای هر مورد</small></article>
-        <article className="panel usage-card"><span className="eyebrow">پردازش هوش مصنوعی</span><strong>۰٫۹۱ دلار</strong><p>۳۹۶ دسته‌بندی · ۱۸۲ پاسخ پیشنهادی</p><small>محدودیت کانتکست فعال است</small></article>
-        <article className="panel usage-card"><span className="eyebrow">Firecrawl</span><strong>۰٫۴۵ دلار</strong><p>۳۱ بررسی انتخابی</p><small>۸٫۴٪ پاسخ‌ها غنی‌سازی شده‌اند</small></article>
+        <article className="panel usage-card"><span className="eyebrow">اعتبار خریداری‌شده</span><strong>۵٫۰۰ دلار</strong><p>سقف سخت همین مقدار است</p><small>Auto Recharge باید خاموش بماند</small></article>
+        <article className="panel usage-card"><span className="eyebrow">هزینه Owned Read</span><strong>۰٫۰۰۱ دلار</strong><p>برای هر منشن جدید برگشتی</p><small>هزینه بر اساس منبع جدید است، نه تعداد Poll</small></article>
+        <article className="panel usage-card"><span className="eyebrow">ظرفیت نظری</span><strong>تا ۵٬۰۰۰</strong><p>منشن جدید با ۵ دلار</p><small>مصرف دقیق و زنده در X Console نمایش داده می‌شود</small></article>
       </div>
-      <article className="panel alert-policy"><div className="panel-head"><div><span className="eyebrow">محافظ‌های خودکار</span><h3>قوانین هشدار بودجه</h3></div><span className="live-pill"><i/> فعال</span></div><div className="policy-row"><span className="policy-level warning">۵۰٪</span><div><strong>هشدار اولیه در ۵ دلار</strong><small>اعلان به تلگرام و اپراتورهای داشبورد</small></div><b>هنوز نرسیده</b></div><div className="policy-row"><span className="policy-level critical">۸۰٪</span><div><strong>هشدار بحرانی در ۸ دلار</strong><small>توقف Firecrawl خودکار و افزایش فاصله پایش</small></div><b>هنوز نرسیده</b></div><div className="policy-row"><span className="policy-level stop">۱۰۰٪</span><div><strong>توقف کامل در ۱۰ دلار</strong><small>خواندن پولی متوقف می‌شود؛ داشبورد در دسترس می‌ماند.</small></div><b>محافظت‌شده</b></div></article>
+      <article className="panel budget-explanation"><strong>این صفحه را چطور بخوانم؟</strong><ol><li>سامانه هر ۲ دقیقه فقط مسیر منشن‌های اکانت خودمان را بررسی می‌کند.</li><li>اگر کامنت جدیدی نباشد، منبع تازه‌ای برای محاسبه هزینه دریافت نمی‌شود.</li><li>شناسه آخرین منشن ذخیره می‌شود تا موارد قدیمی عمداً دوباره درخواست نشوند.</li><li>در ۲٫۵۰ دلار و ۴ دلار به تلگرام هشدار ارسال می‌شود؛ در ۵ دلار پایش متوقف می‌شود.</li></ol></article>
+      <article className="panel alert-policy"><div className="panel-head"><div><span className="eyebrow">محافظ‌های خودکار</span><h3>هشدارهای اعتبار</h3></div><span className="live-pill"><i/> فعال</span></div><div className="policy-row"><span className="policy-level warning">۵۰٪</span><div><strong>هشدار اولیه در ۲٫۵۰ دلار</strong><small>اعلان تلگرام؛ پایش ادامه دارد</small></div><b>فعال</b></div><div className="policy-row"><span className="policy-level critical">۸۰٪</span><div><strong>هشدار مهم در ۴ دلار</strong><small>اعلان فوری به مدیر</small></div><b>فعال</b></div><div className="policy-row"><span className="policy-level stop">۱۰۰٪</span><div><strong>توقف قطعی در ۵ دلار</strong><small>فقط Polling منشن‌ها متوقف می‌شود؛ داشبورد باز می‌ماند.</small></div><b>محافظت‌شده</b></div></article>
     </section>
   );
 }
@@ -946,7 +864,7 @@ function SettingsView() {
   };
   return <section>
     <div className="settings-grid">
-      <article className="panel settings-card"><div className="panel-head"><div><span className="eyebrow">اتصال به X</span><h3>پایش Owned Reads</h3></div><button className={`switch ${settings.polling ? "on" : ""}`} onClick={() => setSettings({ ...settings, polling: !settings.polling })} aria-label="فعال یا غیرفعال‌کردن پایش" aria-pressed={settings.polling}><i/></button></div><div className="x-account-card"><span className="avatar">WT</span><div><small>اکانت رسمی پروژه</small><strong dir="ltr">{X_ACCOUNT_HANDLE}</strong></div><a href={X_ACCOUNT_URL} target="_blank" rel="noreferrer">مشاهده در X ↗</a></div><div className={`x-connection-status ${xConnection?.connected ? "connected" : xConnection?.needsCredit ? "credit" : "error"}`}><span><i />{xChecking ? "در حال بررسی اتصال زنده…" : xConnection?.connected ? `متصل به @${xConnection.account?.username || "wallettrackerH"}` : xConnection?.needsCredit ? "کلیدها ثبت شده‌اند؛ اعتبار X API صفر است" : xConnection?.error || "اتصال X هنوز تأیید نشده است"}</span><button type="button" onClick={() => void checkXConnection()} disabled={xChecking}>{xChecking ? "بررسی…" : "آزمایش دوباره"}</button></div><label>فاصله زمانی پایش<select value={settings.interval} onChange={(event) => setSettings({ ...settings, interval: event.target.value })}><option value="120">هر ۲ دقیقه</option><option value="300">هر ۵ دقیقه</option></select></label><label>سقف قطعی ماهانه<div className="input-prefix"><span>$</span><input inputMode="decimal" value={settings.budget} onChange={(event) => setSettings({ ...settings, budget: event.target.value })}/></div></label><div className="settings-note">سامانه مقدار <code>since_id</code> را ذخیره می‌کند و هیچ پاسخ را عمداً دوبار دریافت نمی‌کند.</div></article>
+      <article className="panel settings-card"><div className="panel-head"><div><span className="eyebrow">اتصال به X</span><h3>فقط پایش کامنت‌های خودمان</h3></div><button className={`switch ${settings.polling ? "on" : ""}`} onClick={() => setSettings({ ...settings, polling: !settings.polling })} aria-label="فعال یا غیرفعال‌کردن پایش" aria-pressed={settings.polling}><i/></button></div><div className="x-account-card"><span className="avatar">WT</span><div><small>اکانت رسمی پروژه</small><strong dir="ltr">{X_ACCOUNT_HANDLE}</strong></div><a href={X_ACCOUNT_URL} target="_blank" rel="noreferrer">مشاهده در X ↗</a></div><div className={`x-connection-status ${xConnection?.connected ? "connected" : xConnection?.needsCredit ? "credit" : "error"}`}><span><i />{xChecking ? "در حال بررسی تنظیمات امن…" : xConnection?.connected ? "کلیدها ثبت شده‌اند و فقط مسیر منشن‌ها مجاز است" : xConnection?.needsCredit ? "اعتبار X API نیاز به شارژ دارد" : xConnection?.error || "تنظیمات X هنوز کامل نشده است"}</span><button type="button" onClick={() => void checkXConnection()} disabled={xChecking}>{xChecking ? "بررسی…" : "بررسی تنظیمات"}</button></div><label>فاصله زمانی پایش<select value={settings.interval} onChange={(event) => setSettings({ ...settings, interval: event.target.value })}><option value="120">هر ۲ دقیقه</option><option value="300">هر ۵ دقیقه</option></select></label><label>سقف قطعی Owned Reads<div className="input-prefix"><span>$</span><input value="5.00" readOnly aria-label="سقف ثابت پنج دلار"/></div></label><div className="settings-note">این سقف قفل است. فقط مسیر <code>GET /2/users/:id/mentions</code> مجاز است و شناسه آخرین منشن برای جلوگیری از خواندن عمدی موارد قدیمی ذخیره می‌شود.</div></article>
       <article className="panel settings-card"><div className="panel-head"><div><span className="eyebrow">قوانین کانتکست</span><h3>غنی‌سازی با Firecrawl</h3></div><button className={`switch ${settings.firecrawl ? "on" : ""}`} onClick={() => setSettings({ ...settings, firecrawl: !settings.firecrawl })} aria-label="فعال یا غیرفعال‌کردن Firecrawl" aria-pressed={settings.firecrawl}><i/></button></div><label className="check-row"><input type="checkbox" checked={settings.lowConfidence} onChange={(event) => setSettings({ ...settings, lowConfidence: event.target.checked })}/><span><strong>پاسخ‌های کم‌اطمینان</strong><small>اطمینان کمتر از ۸۲٪</small></span></label><label className="check-row"><input type="checkbox" checked={settings.externalClaims} onChange={(event) => setSettings({ ...settings, externalClaims: event.target.checked })}/><span><strong>لینک‌ها و ادعاهای خارجی</strong><small>بررسی آدرس‌ها و اطلاعات عمومی روز</small></span></label><label className="check-row"><input type="checkbox" checked={settings.importantAccounts} onChange={(event) => setSettings({ ...settings, importantAccounts: event.target.checked })}/><span><strong>حساب‌های عمومی مهم</strong><small>افزودن پروفایل عمومی و سابقه گفتگو</small></span></label></article>
     </div>
     <div className="settings-savebar"><div><strong>تغییرات تنظیمات</strong><span>پس از بررسی مقادیر، تنظیمات را برای این میز اپراتور ذخیره کنید.</span></div><button className={`btn accent ${saved ? "done" : ""}`} type="button" onClick={saveSettings}>{saved ? "✓ تنظیمات ذخیره شد" : "ذخیره تنظیمات"}</button></div>
@@ -1056,16 +974,18 @@ export default function DashboardClient() {
       <aside className={`sidebar ${mobileNav ? "open" : ""}`}>
         <div className="brand"><div className="brand-mark" aria-hidden="true"><strong>WT</strong></div><div><strong>والت سوشال</strong><small>مرکز مدیریت شبکه اجتماعی</small></div></div>
         <nav className="navigation">
-          {navGroups.map((group) => <div className="nav-group" key={group.label}><div className="nav-label">{group.label}</div>{group.items.map((item) => <button key={item.id} className={`nav-link ${targetView === item.id ? "active" : ""} ${transitionPhase !== "idle" && targetView === item.id ? "pending" : ""}`} onClick={() => changeView(item.id)}><span className="nav-icon">{item.icon}</span><span>{item.label}</span>{item.badge && <b>{item.badge}</b>}</button>)}</div>)}
+          {navGroups.map((group) => {
+            const links = group.items.map((item) => <button key={item.id} className={`nav-link ${targetView === item.id ? "active" : ""} ${transitionPhase !== "idle" && targetView === item.id ? "pending" : ""}`} onClick={() => changeView(item.id)}><span className="nav-icon">{item.icon}</span><span>{item.label}</span>{item.badge && <b>{item.badge}</b>}</button>);
+            return "collapsible" in group && group.collapsible ? <details className="nav-group manager-nav" key={group.label}><summary>{group.label}<span>⌄</span></summary>{links}</details> : <div className="nav-group" key={group.label}><div className="nav-label">{group.label}</div>{links}</div>;
+          })}
         </nav>
-        <div className="automation-card"><div className="automation-head"><span className="eyebrow">موتور پایش</span><i className="status-dot"/></div><strong>در حال بررسی <span dir="ltr">{X_ACCOUNT_HANDLE}</span></strong><p>بررسی بعدی Owned Reads تا <b>{time}</b> دیگر انجام می‌شود. پاسخ‌های جدید مستقیماً وارد بررسی انسانی می‌شوند.</p><button className="btn accent full" onClick={() => changeView("replies")}>بررسی پاسخ‌های منتظر ←</button></div>
-        <div className="sidebar-footer"><span><i className="mini-dot cyan"/> X API</span><span><i className="mini-dot violet"/> هوش مصنوعی</span><span><i className="mini-dot amber"/> Firecrawl</span></div>
+        <div className="automation-card simple"><div className="automation-head"><span>بررسی خودکار کامنت‌ها</span><i className="status-dot"/></div><strong>بررسی بعدی تا <b>{time}</b></strong><p>اگر کامنت تازه‌ای باشد، در «پاسخ‌های آماده» می‌بینی.</p><button className="btn accent full" onClick={() => changeView("replies")}>رفتن به پاسخ‌ها ←</button></div>
       </aside>
 
       {mobileNav && <button className="nav-overlay" onClick={() => setMobileNav(false)} aria-label="بستن منو"/>}
 
       <main className="main">
-        <header className="topbar"><div className="topbar-left"><button className="menu-button" onClick={() => setMobileNav(true)} aria-label="بازکردن منو">☰</button><div className="view-heading" key={view}><div className="title-line"><h1>{viewMeta[view].title}</h1><span className="system-pill"><i/> سیستم سالم است</span></div><p>{viewMeta[view].sub}</p></div></div><div className="topbar-actions"><span className="clock-chip">تهران · ۱۴:۳۲</span><button className={`btn quiet refresh-button ${transitionPhase !== "idle" ? "spinning" : ""}`} onClick={refreshView}><span aria-hidden="true">↻</span> تازه‌سازی</button><button className="logout-button" onClick={() => void logout()} disabled={loggingOut} aria-label="خروج از داشبورد"><span aria-hidden="true">↪</span><b>{loggingOut ? "در حال خروج" : "خروج"}</b></button><span className="operator"><i>ش</i><span><strong>میز اپراتور</strong><small>بررسی انسانی فعال</small></span></span></div></header>
+        <header className="topbar"><div className="topbar-left"><button className="menu-button" onClick={() => setMobileNav(true)} aria-label="بازکردن منو">☰</button><div className="view-heading" key={view}><div className="title-line"><h1>{viewMeta[view].title}</h1><span className="system-pill"><i/> آماده کار</span></div><p>{viewMeta[view].sub}</p></div></div><div className="topbar-actions"><button className={`btn quiet refresh-button ${transitionPhase !== "idle" ? "spinning" : ""}`} onClick={refreshView}><span aria-hidden="true">↻</span> تازه‌سازی</button><button className="logout-button" onClick={() => void logout()} disabled={loggingOut} aria-label="خروج از داشبورد"><span aria-hidden="true">↪</span><b>{loggingOut ? "در حال خروج" : "خروج"}</b></button></div></header>
         <div className={`content content-stage ${transitionPhase === "leaving" ? "is-leaving" : ""}`} aria-busy={isLoading || transitionPhase !== "idle"}>
           {(isLoading || transitionPhase === "loading") ? <ViewSkeleton /> : <div className="view-enter" key={view}>
             {view === "overview" && <Overview onNavigate={changeView}/>} 
@@ -1084,7 +1004,7 @@ export default function DashboardClient() {
         </div>
       </main>
       <nav className="mobile-bottom-nav" aria-label="دسترسی سریع موبایل">
-        {[{ id: "overview" as View, icon: "⌂", label: "خانه" }, { id: "tasks" as View, icon: "◉", label: "امروز" }, { id: "creative" as View, icon: "✦", label: "ساخت" }, { id: "replies" as View, icon: "↩", label: "پاسخ‌ها" }].map((item) => <button key={item.id} className={`${targetView === item.id ? "active" : ""} ${transitionPhase !== "idle" && targetView === item.id ? "pending" : ""}`} onClick={() => changeView(item.id)}><span>{item.icon}</span><small>{item.label}</small></button>)}
+        {[{ id: "overview" as View, icon: "⌂", label: "امروز" }, { id: "content" as View, icon: "۱", label: "پست" }, { id: "replies" as View, icon: "۲", label: "پاسخ" }, { id: "tasks" as View, icon: "✓", label: "کارها" }].map((item) => <button key={item.id} className={`${targetView === item.id ? "active" : ""} ${transitionPhase !== "idle" && targetView === item.id ? "pending" : ""}`} onClick={() => changeView(item.id)}><span>{item.icon}</span><small>{item.label}</small></button>)}
       </nav>
     </div>
   );

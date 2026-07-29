@@ -65,7 +65,7 @@ test("keeps the human publishing and Telegram workflows in the dashboard", async
   assert.match(page, /research-request-form/);
   assert.match(page, /\/api\/research/);
   assert.match(page, /\/api\/x/);
-  assert.match(page, /آزمایش دوباره/);
+  assert.match(page, /بررسی تنظیمات/);
   assert.match(page, /پژوهش زنده در حال اجراست/);
   assert.match(page, /اعلان تلگرام ارسال شد/);
   assert.match(page, /wallet-social-research-results/);
@@ -169,10 +169,36 @@ test("ships the full-service strategy, creative and growth workflows", async () 
   assert.match(page, /Audience activity × Freshness × Quality × Format fit × Risk gate/);
   assert.match(page, /wallet-social-daily-tasks/);
   assert.match(page, /wallet-social-last-creative-brief/);
-  assert.match(page, /کشف زنده پست‌ها منتظر اعتبار X API است/);
+  assert.match(page, /اعتبار X برای رشد مصرف نمی‌شود/);
   assert.match(page, /شباهت با کامنت‌های قبلی کمتر از ۷۲٪/);
   assert.match(css, /\.calendar-grid/);
   assert.match(css, /\.creative-pipeline/);
   assert.match(css, /\.opportunity-card/);
   assert.match(css, /\.lift-card:hover/);
+});
+
+test("keeps the operator flow simple and reserves X credit for owned mentions", async () => {
+  const [page, statusRoute, mentionsRoute, xApi] = await Promise.all([
+    readFile(new URL("../app/dashboard-client.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/x/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/x/mentions/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/x-api.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(page, /امروز فقط این سه مرحله را انجام بده/);
+  assert.match(page, /کارهای اپراتور · از بالا به پایین/);
+  assert.match(page, /ابزارهای مدیر · اپراتور نیاز ندارد/);
+  assert.match(page, /۵ دلار فقط برای خواندن کامنت‌های جدید/);
+  assert.match(page, /۰٫۰۰۱ دلار/);
+  assert.match(page, /هشدار اولیه در ۲٫۵۰ دلار/);
+  assert.match(page, /هشدار مهم در ۴ دلار/);
+  assert.match(page, /توقف قطعی در ۵ دلار/);
+  assert.match(statusRoute, /must never spend X credits/);
+  assert.doesNotMatch(statusRoute, /resolveXAccount|xGet/);
+  assert.match(mentionsRoute, /\/mentions\?/);
+  assert.match(mentionsRoute, /xAccountId/);
+  assert.match(mentionsRoute, /xGetOwned/);
+  assert.doesNotMatch(mentionsRoute, /resolveXAccount|users\/by\/username/);
+  assert.match(xApi, /X_ACCOUNT_ID/);
+  assert.match(xApi, /oauth_signature_method: "HMAC-SHA1"/);
+  assert.match(xApi, /X_ACCESS_TOKEN_SECRET/);
 });

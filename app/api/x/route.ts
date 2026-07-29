@@ -1,5 +1,5 @@
 import { hasDashboardSession } from "@/lib/auth";
-import { resolveXAccount, XApiError, xAccountUsername, xApiIsConfigured } from "@/lib/x-api";
+import { xAccountUsername, xOwnedPollingIsConfigured } from "@/lib/x-api";
 
 const headers = { "cache-control": "no-store, max-age=0", "content-type": "application/json; charset=utf-8" };
 
@@ -9,21 +9,14 @@ function json(body: unknown, status = 200) {
 
 export async function GET() {
   if (!(await hasDashboardSession())) return json({ configured: false, connected: false, error: "نشست داشبورد منقضی شده است." }, 401);
-  if (!xApiIsConfigured()) return json({ configured: false, connected: false, handle: `@${xAccountUsername()}`, error: "کلیدهای X API روی سرور تنظیم نشده‌اند." }, 503);
-
-  try {
-    const account = await resolveXAccount();
-    return json({
-      configured: true,
-      connected: account.username.toLocaleLowerCase() === xAccountUsername().toLocaleLowerCase(),
-      handle: `@${account.username}`,
-      account,
-    });
-  } catch (error) {
-    if (error instanceof XApiError) {
-      return json({ configured: true, connected: false, handle: `@${xAccountUsername()}`, code: error.code, needsCredit: error.code === "credits_required", error: error.message }, error.status);
-    }
-    return json({ configured: true, connected: false, handle: `@${xAccountUsername()}`, error: "بررسی اتصال X ناموفق بود." }, 502);
-  }
+  if (!xOwnedPollingIsConfigured()) return json({ configured: false, connected: false, handle: `@${xAccountUsername()}`, error: "اتصال کاربری Owned Reads هنوز کامل نشده است؛ هیچ اعتباری مصرف نمی‌شود." }, 503);
+  // This status route must never spend X credits. Only /api/x/mentions may call X.
+  return json({
+    configured: true,
+    connected: true,
+    handle: `@${xAccountUsername()}`,
+    mode: "owned_mentions_only",
+    budgetUsd: 5,
+    unitCostUsd: 0.001,
+  });
 }
-
