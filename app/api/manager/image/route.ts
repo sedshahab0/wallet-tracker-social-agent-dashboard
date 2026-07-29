@@ -21,7 +21,13 @@ export async function POST(request: Request) {
     const payload = (await response.json().catch(() => ({}))) as ImagePayload;
     const imageUrl = payload.data?.[0]?.url;
     if (!response.ok || !imageUrl) throw new Error(payload.error?.message || `xAI image error (${response.status})`);
-    return json({ ok: true, imageUrl, temporary: true });
+    const imageResponse = await fetch(imageUrl, { signal: AbortSignal.timeout(45_000) });
+    if (!imageResponse.ok) throw new Error(`دریافت فایل تصویر از xAI ناموفق بود (${imageResponse.status}).`);
+    const bytes = new Uint8Array(await imageResponse.arrayBuffer());
+    if (!bytes.length || bytes.length > 4_500_000) throw new Error("حجم تصویر تولیدشده قابل ذخیره‌سازی نیست.");
+    const mimeType = payload.data?.[0]?.mime_type || imageResponse.headers.get("content-type") || "image/jpeg";
+    const imageDataUrl = `data:${mimeType};base64,${Buffer.from(bytes).toString("base64")}`;
+    return json({ ok: true, imageUrl: imageDataUrl, temporary: false });
   } catch (error) {
     return json({ ok: false, error: error instanceof Error ? error.message : "تولید تصویر ناموفق بود." }, 502);
   }

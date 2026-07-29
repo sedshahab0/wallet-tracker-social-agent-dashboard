@@ -1,7 +1,14 @@
 import type { DailyManagerPlan, LiveSource } from "@/lib/social-manager-types";
+import { PRODUCT_PROFILE_URL, PRODUCT_WEBSITE_URL, VERIFIED_PROJECT_SOURCE } from "@/lib/project-knowledge";
 
 type FirecrawlHit = { title?: string; url?: string; description?: string; markdown?: string };
-type FirecrawlPayload = { success?: boolean; data?: { web?: FirecrawlHit[] }; web?: FirecrawlHit[]; error?: string };
+type FirecrawlPayload = {
+  success?: boolean;
+  data?: { web?: FirecrawlHit[]; news?: FirecrawlHit[]; markdown?: string; metadata?: { title?: string; sourceURL?: string } };
+  web?: FirecrawlHit[];
+  news?: FirecrawlHit[];
+  error?: string;
+};
 type ChatPayload = { choices?: Array<{ message?: { content?: string } }>; error?: { message?: string } };
 
 const managerSchema = {
@@ -65,48 +72,93 @@ const managerSchema = {
 } as const;
 
 function cleanText(hit: FirecrawlHit) {
-  return (hit.description || hit.markdown || "").replace(/[#*_`>\n]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 500);
+  return (hit.description || hit.markdown || "").replace(/[#*_\`>\n]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 1800);
 }
 
-async function firecrawlSearch(query: string, channel: LiveSource["channel"], limit = 5): Promise<LiveSource[]> {
+function firecrawlTransport() {
   const apiKey = process.env.FIRECRAWL_API_KEY?.trim();
   if (!apiKey) throw new Error("کلید Firecrawl تنظیم نشده است.");
   const proxyUrl = process.env.FIRECRAWL_PROXY_URL?.trim();
   const proxySecret = process.env.RESEARCH_PROXY_SECRET?.trim();
   const proxyBearer = process.env.FIRECRAWL_PROXY_BEARER?.trim();
-  const endpoint = proxyUrl && proxySecret ? proxyUrl : "https://api.firecrawl.dev/v2/search";
   const headers: Record<string, string> = { "content-type": "application/json" };
-  if (endpoint === proxyUrl) {
-    headers["x-research-proxy-key"] = proxySecret!;
+  if (proxyUrl && proxySecret) {
+    headers["x-research-proxy-key"] = proxySecret;
     if (proxyBearer) headers["OAI-Sites-Authorization"] = `Bearer ${proxyBearer}`;
-  } else {
-    headers.authorization = `Bearer ${apiKey}`;
+    return { endpoint: proxyUrl, headers, proxied: true };
   }
+  headers.authorization = `Bearer ${apiKey}`;
+  return { endpoint: "https://api.firecrawl.dev/v2", headers, proxied: false };
+}
+
+async function firecrawlRequest(operation: "search" | "scrape", body: Record<string, unknown>) {
+  const transport = firecrawlTransport();
+  const endpoint = transport.proxied ? transport.endpoint : `${transport.endpoint}/${operation}`;
   const response = await fetch(endpoint, {
     method: "POST",
-    headers,
-    body: JSON.stringify({ query, sources: ["web"], limit, ignoreInvalidURLs: true, timeout: 45_000 }),
+    headers: transport.headers,
+    body: JSON.stringify(transport.proxied ? { operation, ...body } : body),
     signal: AbortSignal.timeout(55_000),
   });
   const payload = (await response.json().catch(() => ({}))) as FirecrawlPayload;
-  if (!response.ok || payload.success === false) throw new Error(payload.error || `Firecrawl error (${response.status})`);
-  return (payload.data?.web || payload.web || []).flatMap((hit) => hit.url ? [{ title: hit.title?.trim() || new URL(hit.url).hostname, url: hit.url, description: cleanText(hit), channel }] : []);
+  if (!response.ok || payload.success === false) throw new Error(payload.error || `Firecrawl ${operation} error (${response.status})`);
+  return payload;
+}
+
+async function firecrawlSearch(
+  query: string,
+  channel: LiveSource["channel"],
+  options: { limit?: number; tbs?: string; hydrate?: boolean; sources?: Array<"web" | "news"> } = {},
+): Promise<LiveSource[]> {
+  const payload = await firecrawlRequest("search", {
+    query,
+    sources: options.sources || ["web"],
+    limit: options.limit || 5,
+    tbs: options.tbs,
+    ignoreInvalidURLs: true,
+    timeout: 45_000,
+    scrapeOptions: options.hydrate ? { formats: ["markdown"], onlyMainContent: true, maxAge: 3_600_000 } : undefined,
+  });
+  return [...(payload.data?.web || payload.web || []), ...(payload.data?.news || payload.news || [])]
+    .flatMap((hit) => hit.url ? [{ title: hit.title?.trim() || new URL(hit.url).hostname, url: hit.url, description: cleanText(hit), channel }] : []);
+}
+
+async function firecrawlScrape(url: string, channel: LiveSource["channel"]): Promise<LiveSource[]> {
+  const payload = await firecrawlRequest("scrape", {
+    url,
+    formats: ["markdown", "links"],
+    onlyMainContent: true,
+    waitFor: 1500,
+    blockAds: true,
+    removeBase64Images: true,
+    maxAge: 900_000,
+    timeout: 45_000,
+  });
+  const markdown = payload.data?.markdown?.replace(/[#*_\`>]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 1800) || "";
+  if (!markdown) return [];
+  return [{ title: payload.data?.metadata?.title || new URL(url).hostname, url: payload.data?.metadata?.sourceURL || url, description: markdown, channel }];
 }
 
 export async function collectLiveSources(date: string) {
   const queries = [
-    firecrawlSearch(`site:x.com/*/status/ ("wallet security" OR "on-chain alerts" OR "wallet monitoring") crypto ${date}`, "x", 7),
-    firecrawlSearch(`crypto wallet security on-chain monitoring product news ${date}`, "news", 6),
-    firecrawlSearch(`("wallettracker.app" OR "Wallet Tracker") on-chain wallet alerts Solana EVM`, "product", 5),
+    firecrawlScrape(PRODUCT_PROFILE_URL, "account"),
+    firecrawlScrape(PRODUCT_WEBSITE_URL, "product"),
+    firecrawlSearch("site:x.com/wallettrackerH/status wallettrackerH", "account", { limit: 8, hydrate: true }),
+    firecrawlSearch('site:x.com/*/status ("wallet security" OR "wallet monitoring" OR "on-chain alerts") -giveaway -airdrop', "x", { limit: 10, tbs: "qdr:w", hydrate: true }),
+    firecrawlSearch('site:x.com/*/status ("transaction alerts" OR "wallet tracker") (Solana OR Ethereum OR EVM)', "x", { limit: 10, tbs: "qdr:w", hydrate: true }),
+    firecrawlSearch(`crypto wallet monitoring transaction alert product news ${date}`, "news", { limit: 8, tbs: "qdr:w", hydrate: true, sources: ["news", "web"] }),
+    firecrawlSearch("on-chain wallet analytics security tools launch update", "competitor", { limit: 8, tbs: "qdr:m", hydrate: true, sources: ["news", "web"] }),
+    firecrawlSearch("site:wallettracker.app Wallet Tracker", "product", { limit: 6, hydrate: true }),
   ];
   const settled = await Promise.allSettled(queries);
   const seen = new Set<string>();
-  const sources = settled.flatMap((item) => item.status === "fulfilled" ? item.value : []).filter((source) => {
-    if (seen.has(source.url)) return false;
-    seen.add(source.url);
+  const sources = [VERIFIED_PROJECT_SOURCE, ...settled.flatMap((item) => item.status === "fulfilled" ? item.value : [])].filter((source) => {
+    const key = normalizeUrl(source.url) || source.url;
+    if (seen.has(key) || source.description.length < 35) return false;
+    seen.add(key);
     return true;
-  }).slice(0, 16);
-  if (sources.length < 3) throw new Error("منابع زنده کافی برای ساخت برنامه قابل اعتماد پیدا نشد.");
+  }).slice(0, 36);
+  if (sources.length < 4) throw new Error("منابع زنده کافی برای ساخت برنامه قابل اعتماد پیدا نشد.");
   return sources;
 }
 
@@ -167,7 +219,7 @@ export async function buildDailyPlan(date: string, sources: LiveSource[]): Promi
       model: process.env.XAI_TEXT_MODEL?.trim() || "grok-4.3",
       temperature: 0.25,
       messages: [
-        { role: "system", content: `You are the full-service X brand manager for Wallet Tracker, a product for real-time public on-chain wallet monitoring and transaction alerts across Solana and EVM. Produce a safe, evidence-based daily operating plan for a non-expert human operator. All operator instructions and explanations must be Persian. Public posts and comments should normally be natural English unless the target post is another language. Never invent product capabilities, metrics, partnerships, transactions, or news. Every factual post must cite source URLs supplied below. Keep each X post at most 260 characters. Do not recommend mass following, repetitive comments, engagement bait, financial advice, or automated posting. Decide to pause publishing if evidence is weak. Schedule 1-2 quality posts maximum and 2-4 meaningful interactions. Every image prompt must be 16:9, premium black/orange Wallet Tracker visual, directly related to the post, no logos of other companies and no tiny text.` },
+        { role: "system", content: `You are the full-service X brand manager for Wallet Tracker. Produce a safe, evidence-based daily operating plan for a non-expert human operator. All operator instructions and explanations must be Persian. Public posts and comments should normally be natural English unless the target post is another language. Never invent product capabilities, metrics, partnerships, transactions, networks, or news. Treat [project] sources as verified first-party repository facts and all other sources as live public context. Every factual post must cite only supplied source URLs. Keep each X post at most 260 characters. Do not recommend mass following, repetitive comments, engagement bait, financial advice, automated posting, or any X API discovery request. If the [account] sources show no posts, or no account post is discoverable, this is bootstrap mode: create one truthful introductory post from verified [project] facts instead of pausing merely because external mentions are absent. In bootstrap mode the first post should clearly explain what Wallet Tracker does, invite people to follow product progress, and avoid unsupported claims. Pause only when even first-party evidence is insufficient or a real safety risk exists. Schedule 1-2 quality posts maximum and 2-4 meaningful interactions. Every image prompt must be 16:9, premium black/orange Wallet Tracker visual, directly related to the exact post, no logos of other companies and no tiny text.` },
         { role: "user", content: `Date: ${date}\n\nLive sources collected by Firecrawl:\n${sourceContext(sources)}` },
       ],
       response_format: { type: "json_schema", json_schema: { name: "wallet_tracker_daily_plan", strict: true, schema: managerSchema } },

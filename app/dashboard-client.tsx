@@ -33,6 +33,7 @@ type ContentItem = {
   source: string;
   postText: string;
   imageUrl?: string;
+  imageError?: string;
   sourceUrls?: string[];
 };
 type ResearchSource = {
@@ -195,25 +196,30 @@ function useDailyManagerPlan() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [stage, setStage] = useState("در حال بررسی برنامه ذخیره‌شده امروز…");
+  const [imageErrors, setImageErrors] = useState<Record<string, string>>({});
   const imageRequests = useRef(new Set<string>());
 
-  const generateImages = useCallback(async (dailyPlan: DailyManagerPlan) => {
+  const generateImages = useCallback(async (dailyPlan: DailyManagerPlan, force = false) => {
     const storageKey = `wallet-social-manager-images-${dailyPlan.date}`;
     let stored: Record<string, string> = {};
     try { stored = JSON.parse(localStorage.getItem(storageKey) || "{}"); } catch { stored = {}; }
     if (Object.keys(stored).length) setPlan((current) => current ? { ...current, posts: current.posts.map((post) => ({ ...post, imageUrl: stored[post.id] || post.imageUrl })) } : current);
     for (const post of dailyPlan.posts) {
-      if (stored[post.id] || imageRequests.current.has(post.id)) continue;
+      if ((!force && stored[post.id]) || imageRequests.current.has(post.id)) continue;
+      if (force) delete stored[post.id];
       imageRequests.current.add(post.id);
       try {
+        setImageErrors((current) => { const next = { ...current }; delete next[post.id]; return next; });
         setStage(`در حال ساخت تصویر اختصاصی «${post.title}»…`);
         const response = await fetch("/api/manager/image", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ prompt: post.imagePrompt }) });
-        const payload = await response.json() as { ok?: boolean; imageUrl?: string };
-        if (response.ok && payload.ok && payload.imageUrl) {
-          stored[post.id] = payload.imageUrl;
-          localStorage.setItem(storageKey, JSON.stringify(stored));
-          setPlan((current) => current ? { ...current, posts: current.posts.map((item) => item.id === post.id ? { ...item, imageUrl: payload.imageUrl } : item) } : current);
-        }
+        const payload = await response.json() as { ok?: boolean; imageUrl?: string; error?: string };
+        if (!response.ok || !payload.ok || !payload.imageUrl) throw new Error(payload.error || `تولید تصویر ناموفق بود (${response.status}).`);
+        stored[post.id] = payload.imageUrl;
+        setPlan((current) => current ? { ...current, posts: current.posts.map((item) => item.id === post.id ? { ...item, imageUrl: payload.imageUrl } : item) } : current);
+        try { localStorage.setItem(storageKey, JSON.stringify(stored)); } catch { /* The in-memory image remains usable if browser storage is full. */ }
+      } catch (reason) {
+        const message = reason instanceof Error ? reason.message : "تولید تصویر ناموفق بود.";
+        setImageErrors((current) => ({ ...current, [post.id]: message }));
       } finally {
         imageRequests.current.delete(post.id);
       }
@@ -245,7 +251,7 @@ function useDailyManagerPlan() {
   }, [generateImages]);
 
   useEffect(() => { const timer = window.setTimeout(() => void load(false), 0); return () => window.clearTimeout(timer); }, [load]);
-  return { plan, loading, error, stage, regenerate: () => load(true) };
+  return { plan, loading, error, stage, imageErrors, regenerate: () => load(true), retryImages: () => plan ? generateImages(plan, true) : Promise.resolve() };
 }
 
 function ModalShell({ title, eyebrow, children, footer, onClose, closeDisabled = false }: { title: string; eyebrow: string; children: ReactNode; footer: ReactNode; onClose: () => void; closeDisabled?: boolean }) {
@@ -317,6 +323,8 @@ function Overview({ onNavigate, manager }: { onNavigate: (view: View) => void; m
       <div className={`manager-live-strip panel ${error ? "has-error" : ""}`}><div><i className="status-dot"/><span><strong>{stage}</strong><small>{plan ? `آخرین تحلیل: ${new Date(plan.generatedAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" })} · ${plan.sources.length.toLocaleString("fa-IR")} منبع زنده` : error || "این فرایند در اولین ورود هر روز خودکار اجرا می‌شود."}</small></span></div><button className="btn quiet" disabled={loading} onClick={() => void regenerate()}>{loading ? "در حال ساخت…" : "بازسازی با داده تازه ↻"}</button></div>
 
       {plan && <article className={`publish-decision panel ${plan.publishDecision}`}><span>{plan.publishDecision === "publish" ? "امروز منتشر می‌کنیم" : plan.publishDecision === "light" ? "امروز سبک منتشر می‌کنیم" : "امروز پست تازه نمی‌گذاریم"}</span><strong>{plan.publishReason}</strong></article>}
+
+      {plan && <div className="simple-status panel"><div><i className="status-dot"/><span><strong>وضعیت عمومی اکانت بررسی شد</strong><small>{plan.sources.filter((source) => source.channel === "account").length.toLocaleString("fa-IR")} منبع از پروفایل و پست‌های عمومی اکانت با Firecrawl</small></span></div><div><i className="budget-lock">✓</i><span><strong>دانش واقعی پروژه وارد تصمیم شد</strong><small>{plan.sources.filter((source) => source.channel === "project" || source.channel === "product").length.toLocaleString("fa-IR")} منبع اول‌شخص از مخزن و وب‌سایت محصول</small></span></div><div><i className="telegram-dot">◇</i><span><strong>بازار و گفتگوهای مرتبط رصد شدند</strong><small>{plan.sources.filter((source) => ["x", "news", "competitor"].includes(source.channel)).length.toLocaleString("fa-IR")} منبع تازه از X، خبر و رقبا؛ بدون مصرف اعتبار X API</small></span></div></div>}
 
       <div className="operator-journey">
         {(plan?.tasks.slice(0, 3) || []).map((task, index) => <article className={`operator-step panel lift-card ${index === 0 ? "current" : ""}`} key={task.id}><span className="step-number">{(index + 1).toLocaleString("fa-IR")}</span><div className="step-copy"><small>{task.time} · {task.priority === "now" ? "الان انجام بده" : "امروز انجام بده"}</small><h3>{task.title}</h3><p>{task.instruction}</p><div className={task.risk === "green" ? "step-safe" : "step-warning"}>{task.why}</div></div><button className={index === 0 ? "btn accent" : "btn quiet"} onClick={() => onNavigate(task.kind === "publish" ? "content" : task.kind === "reply" ? "replies" : task.kind === "interact" ? "growth" : "tasks")}>رفتن به بخش ←</button></article>)}
@@ -434,7 +442,7 @@ function RepliesView({ replyItems, onRepliesChange, sentIds, onMarkSent }: { rep
   );
 }
 
-function ContentView({ content, onContentChange, sentIds, onMarkSent }: { content: ContentItem[]; onContentChange: (items: ContentItem[]) => void; sentIds: string[]; onMarkSent: (id: string) => void }) {
+function ContentView({ content, onContentChange, sentIds, onMarkSent, onRetryImages }: { content: ContentItem[]; onContentChange: (items: ContentItem[]) => void; sentIds: string[]; onMarkSent: (id: string) => void; onRetryImages: () => void }) {
   const [filter, setFilter] = useState<"all" | Risk>("all");
   const [status, setStatus] = useState<"all" | "ready" | "sent">("all");
   const [toast, setToast] = useState("");
@@ -479,7 +487,7 @@ function ContentView({ content, onContentChange, sentIds, onMarkSent }: { conten
           return <article className={`panel content-card ${isSent ? "is-sent" : ""}`} key={item.id}>
             <div className="content-card-top"><span className="content-type">{item.type}</span>{isSent ? <span className="sent-chip">✓ منتشرشده</span> : <RiskBadge risk={item.risk} />}</div>
             <h3>{item.title}</h3><p>{item.body}</p>
-            {item.imageUrl ? <div className="generated-post-image"><Image src={item.imageUrl} alt={`تصویر اختصاصی ${item.title}`} width={1024} height={576} unoptimized /><span>تصویر تولیدشده با Grok Imagine · متناسب با همین پست</span></div> : <div className="generated-post-image pending"><span className="button-spinner"/><strong>تصویر اختصاصی در حال تولید است…</strong></div>}
+            {item.imageUrl ? <div className="generated-post-image"><Image src={item.imageUrl} alt={`تصویر اختصاصی ${item.title}`} width={1024} height={576} unoptimized /><span>تصویر تولیدشده با Grok Imagine · متناسب با همین پست</span></div> : item.imageError ? <div className="generated-post-image pending failed"><strong>تولید تصویر کامل نشد</strong><span>{item.imageError}</span><button className="btn quiet" onClick={onRetryImages}>تلاش دوباره برای تصویر</button></div> : <div className="generated-post-image pending"><span className="button-spinner"/><strong>تصویر اختصاصی در حال تولید است…</strong></div>}
             <div className="content-meta"><span>{item.language}</span><span>{item.time}</span></div>
             <div className="source-box"><span>منبع</span><strong>{item.source}</strong></div>
             <div className="publish-copy" dir="auto"><span>متن نهایی برای X</span><p>{item.postText}</p></div>
@@ -877,13 +885,13 @@ export default function DashboardClient() {
 
   useEffect(() => {
     if (!dailyManager.plan) return;
-    const generatedItems: ContentItem[] = dailyManager.plan.posts.map((post) => ({ id: `live-${dailyManager.plan!.date}-${post.id}`, type: "پیشنهاد زنده مدیر هوشمند", title: post.title, body: post.summaryFa, language: post.language, risk: post.risk, time: `امروز · ${post.time}`, source: `${post.sourceUrls.length.toLocaleString("fa-IR")} منبع زنده Firecrawl`, postText: post.copy, imageUrl: post.imageUrl, sourceUrls: post.sourceUrls }));
+    const generatedItems: ContentItem[] = dailyManager.plan.posts.map((post) => ({ id: `live-${dailyManager.plan!.date}-${post.id}`, type: "پیشنهاد زنده مدیر هوشمند", title: post.title, body: post.summaryFa, language: post.language, risk: post.risk, time: `امروز · ${post.time}`, source: `${post.sourceUrls.length.toLocaleString("fa-IR")} منبع زنده Firecrawl`, postText: post.copy, imageUrl: post.imageUrl, imageError: dailyManager.imageErrors[post.id], sourceUrls: post.sourceUrls }));
     setManagedContent((current) => {
       const generatedIds = new Set(generatedItems.map((item) => item.id));
       const previous = current.filter((item) => !item.id.startsWith("live-") && !generatedIds.has(item.id));
       return [...generatedItems, ...previous];
     });
-  }, [dailyManager.plan, setManagedContent]);
+  }, [dailyManager.imageErrors, dailyManager.plan, setManagedContent]);
 
   useEffect(() => {
     const initialView = viewFromPathname(window.location.pathname);
@@ -993,7 +1001,7 @@ export default function DashboardClient() {
             {view === "creative" && <CreativeView onNavigate={changeView} plan={dailyManager.plan}/>}
             {view === "growth" && <GrowthView plan={dailyManager.plan}/>}
             {view === "replies" && <RepliesView replyItems={managedReplies.items} onRepliesChange={managedReplies.setItems} sentIds={sentReplies.ids} onMarkSent={sentReplies.mark}/>}
-            {view === "content" && <ContentView content={managedContent.items} onContentChange={managedContent.setItems} sentIds={sentPosts.ids} onMarkSent={sentPosts.mark}/>}
+            {view === "content" && <ContentView content={managedContent.items} onContentChange={managedContent.setItems} sentIds={sentPosts.ids} onMarkSent={sentPosts.mark} onRetryImages={() => void dailyManager.retryImages()}/>}
             {view === "sent" && <SentView replyIds={sentReplies.ids} postIds={sentPosts.ids} replyItems={managedReplies.items} content={managedContent.items}/>}
             {view === "telegram" && <TelegramView/>}
             {view === "research" && <ResearchView/>}

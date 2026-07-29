@@ -215,20 +215,30 @@ test("keeps the operator flow simple and reserves X credit for owned mentions", 
 });
 
 test("builds an evidence-bound daily manager with Firecrawl and xAI", async () => {
-  const [manager, planRoute, cronRoute, imageRoute, page, exampleEnv, timer] = await Promise.all([
+  const [manager, planRoute, cronRoute, imageRoute, proxyRoute, projectKnowledge, page, exampleEnv, timer] = await Promise.all([
     readFile(new URL("../lib/social-manager.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/manager/daily-plan/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/manager/run/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/manager/image/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/firecrawl-proxy/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/project-knowledge.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard-client.tsx", import.meta.url), "utf8"),
     readFile(new URL("../.env.example", import.meta.url), "utf8"),
     readFile(new URL("../deploy/wallet-social-manager.timer", import.meta.url), "utf8"),
   ]);
-  assert.match(manager, /api\.firecrawl\.dev\/v2\/search/);
+  assert.match(manager, /api\.firecrawl\.dev\/v2/);
+  assert.match(manager, /firecrawlScrape/);
+  assert.match(manager, /scrapeOptions/);
+  assert.match(manager, /tbs: "qdr:w"/);
+  assert.match(manager, /VERIFIED_PROJECT_SOURCE/);
   assert.match(manager, /site:x\.com/);
   assert.match(manager, /Promise\.allSettled/);
   assert.match(manager, /FIRECRAWL_PROXY_URL/);
   assert.match(manager, /x-research-proxy-key/);
+  assert.doesNotMatch(manager, /xGet|resolveXAccount|api\.x\.com/);
+  assert.match(proxyRoute, /operation === "scrape"/);
+  assert.match(proxyRoute, /scrapeOptions/);
+  assert.match(projectKnowledge, /real-time notifications for new transactions/);
   assert.match(manager, /api\.x\.ai\/v1\/chat\/completions/);
   assert.match(manager, /json_schema/);
   assert.match(manager, /evidenceBoundPlan/);
@@ -238,6 +248,7 @@ test("builds an evidence-bound daily manager with Firecrawl and xAI", async () =
   assert.match(cronRoute, /SOCIAL_MANAGER_CRON_SECRET/);
   assert.match(imageRoute, /api\.x\.ai\/v1\/images\/generations/);
   assert.match(imageRoute, /grok-imagine-image/);
+  assert.match(imageRoute, /data:\$\{mimeType\};base64/);
   assert.match(page, /مدیر هوشمند روزانه · داده زنده/);
   assert.match(page, /Firecrawl در حال بررسی X/);
   assert.match(page, /\/api\/manager\/image/);

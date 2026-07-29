@@ -4,7 +4,7 @@ export type LiveSource = {
   title: string;
   url: string;
   description: string;
-  channel: "x" | "news" | "product";
+  channel: "x" | "news" | "product" | "account" | "project" | "competitor";
 };
 
 export type DailyManagerTask = {
