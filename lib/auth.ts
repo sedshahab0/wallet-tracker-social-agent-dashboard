@@ -72,6 +72,10 @@ export async function hasDashboardSession() {
 
 const allowedPaths = new Set([
   "/",
+  "/strategy",
+  "/tasks",
+  "/creative",
+  "/growth",
   "/replies",
   "/content",
   "/history",

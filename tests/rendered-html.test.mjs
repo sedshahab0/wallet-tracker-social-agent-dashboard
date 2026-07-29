@@ -150,3 +150,29 @@ test("keeps X credentials server-side and exposes guarded live endpoints", async
   assert.match(exampleEnv, /X_BEARER_TOKEN=\n/);
   assert.doesNotMatch(`${statusRoute}\n${mentionsRoute}\n${xApi}`, /Bearer\s+[A-Za-z0-9%_-]{40,}/);
 });
+
+test("ships the full-service strategy, creative and growth workflows", async () => {
+  const [page, auth, css] = await Promise.all([
+    readFile(new URL("../app/dashboard-client.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/auth.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  for (const route of ["/strategy", "/tasks", "/creative", "/growth"]) {
+    assert.match(page, new RegExp(route));
+    assert.match(auth, new RegExp(route));
+  }
+  assert.match(page, /استراتژی و تقویم/);
+  assert.match(page, /کارهای امروز/);
+  assert.match(page, /استودیوی محتوا/);
+  assert.match(page, /رشد و تعامل/);
+  assert.match(page, /Audience activity × Freshness × Quality × Format fit × Risk gate/);
+  assert.match(page, /wallet-social-daily-tasks/);
+  assert.match(page, /wallet-social-last-creative-brief/);
+  assert.match(page, /کشف زنده پست‌ها منتظر اعتبار X API است/);
+  assert.match(page, /شباهت با کامنت‌های قبلی کمتر از ۷۲٪/);
+  assert.match(css, /\.calendar-grid/);
+  assert.match(css, /\.creative-pipeline/);
+  assert.match(css, /\.opportunity-card/);
+  assert.match(css, /\.lift-card:hover/);
+});
