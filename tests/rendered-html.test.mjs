@@ -214,6 +214,18 @@ test("keeps the operator flow simple and reserves X credit for owned mentions", 
   assert.match(xApi, /X_ACCESS_TOKEN_SECRET/);
 });
 
+test("opens generated content images in an accessible lightbox", async () => {
+  const [page, css] = await Promise.all([
+    readFile(new URL("../app/dashboard-client.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+  assert.match(page, /function ImageLightbox/);
+  assert.match(page, /aria-label={`بزرگ‌نمایی تصویر/);
+  assert.match(page, /event\.key === "Escape"/);
+  assert.match(css, /\.image-lightbox/);
+  assert.match(css, /cursor:zoom-in/);
+});
+
 test("builds an evidence-bound daily manager with Firecrawl and xAI", async () => {
   const [manager, planRoute, cronRoute, imageRoute, proxyRoute, projectKnowledge, page, exampleEnv, timer] = await Promise.all([
     readFile(new URL("../lib/social-manager.ts", import.meta.url), "utf8"),

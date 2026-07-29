@@ -288,6 +288,33 @@ function ModalShell({ title, eyebrow, children, footer, onClose, closeDisabled =
   );
 }
 
+function ImageLightbox({ src, title, onClose }: { src: string; title: string; onClose: () => void }) {
+  const closeButton = useRef<HTMLButtonElement>(null);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    const handleKey = (event: KeyboardEvent) => { if (event.key === "Escape") onCloseRef.current(); };
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", handleKey);
+    closeButton.current?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, []);
+  return createPortal(
+    <div className="image-lightbox" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) onClose(); }}>
+      <figure role="dialog" aria-modal="true" aria-label={`نمایش بزرگ ${title}`}>
+        <button ref={closeButton} className="image-lightbox-close" type="button" onClick={onClose} aria-label="بستن تصویر بزرگ">×</button>
+        <Image src={src} alt={`نمایش بزرگ ${title}`} width={1600} height={900} unoptimized priority />
+        <figcaption><span>{title}</span><small>برای بستن، بیرون تصویر کلیک کنید یا کلید Esc را بزنید.</small></figcaption>
+      </figure>
+    </div>,
+    document.body,
+  );
+}
+
 function RiskBadge({ risk }: { risk: Risk }) {
   const label = risk === "green" ? "کم‌ریسک" : risk === "yellow" ? "نیازمند بررسی" : "ارجاع فوری";
   return <span className={`risk-badge ${risk}`}><i />{label}</span>;
@@ -447,6 +474,7 @@ function ContentView({ content, onContentChange, sentIds, onMarkSent, onRetryIma
   const [status, setStatus] = useState<"all" | "ready" | "sent">("all");
   const [toast, setToast] = useState("");
   const [editorOpen, setEditorOpen] = useState(false);
+  const [previewImage, setPreviewImage] = useState<{ src: string; title: string } | null>(null);
   const [draft, setDraft] = useState<ContentItem>({ id: "", type: "به‌روزرسانی محصول", title: "", body: "", language: "انگلیسی", risk: "green", time: "زمان‌بندی نشده", source: "", postText: "" });
   const items = useMemo(() => content.filter((item) => filter === "all" || item.risk === filter), [content, filter]);
   const visibleItems = items.filter((item) => status === "all" || (status === "sent") === sentIds.includes(item.id));
@@ -487,7 +515,7 @@ function ContentView({ content, onContentChange, sentIds, onMarkSent, onRetryIma
           return <article className={`panel content-card ${isSent ? "is-sent" : ""}`} key={item.id}>
             <div className="content-card-top"><span className="content-type">{item.type}</span>{isSent ? <span className="sent-chip">✓ منتشرشده</span> : <RiskBadge risk={item.risk} />}</div>
             <h3>{item.title}</h3><p>{item.body}</p>
-            {item.imageUrl ? <div className="generated-post-image"><Image src={item.imageUrl} alt={`تصویر اختصاصی ${item.title}`} width={1024} height={576} unoptimized /><span>تصویر تولیدشده با Grok Imagine · متناسب با همین پست</span></div> : item.imageError ? <div className="generated-post-image pending failed"><strong>تولید تصویر کامل نشد</strong><span>{item.imageError}</span><button className="btn quiet" onClick={onRetryImages}>تلاش دوباره برای تصویر</button></div> : <div className="generated-post-image pending"><span className="button-spinner"/><strong>تصویر اختصاصی در حال تولید است…</strong></div>}
+            {item.imageUrl ? <div className="generated-post-image"><button className="image-preview-button" type="button" onClick={() => setPreviewImage({ src: item.imageUrl!, title: item.title })} aria-label={`بزرگ‌نمایی تصویر ${item.title}`}><Image src={item.imageUrl} alt={`تصویر اختصاصی ${item.title}`} width={1024} height={576} unoptimized /><i aria-hidden="true">⌕</i></button><span>برای مشاهده بزرگ‌تر روی تصویر بزنید</span></div> : item.imageError ? <div className="generated-post-image pending failed"><strong>تولید تصویر کامل نشد</strong><span>{item.imageError}</span><button className="btn quiet" onClick={onRetryImages}>تلاش دوباره برای تصویر</button></div> : <div className="generated-post-image pending"><span className="button-spinner"/><strong>تصویر اختصاصی در حال تولید است…</strong></div>}
             <div className="content-meta"><span>{item.language}</span><span>{item.time}</span></div>
             <div className="source-box"><span>منبع</span><strong>{item.source}</strong></div>
             <div className="publish-copy" dir="auto"><span>متن نهایی برای X</span><p>{item.postText}</p></div>
@@ -498,6 +526,7 @@ function ContentView({ content, onContentChange, sentIds, onMarkSent, onRetryIma
       </div>
       {visibleItems.length === 0 && <div className="panel empty-state"><strong>{content.length ? "موردی با این فیلتر پیدا نشد." : "هنوز محتوای واقعی آماده نشده است."}</strong><p>{content.length ? "فیلتر وضعیت یا ریسک را تغییر دهید." : "پس از تکمیل برنامه زنده و تأیید منابع، پست واقعی اینجا ظاهر می‌شود."}</p></div>}
       {toast && <div className="toast">✓ {toast}</div>}
+      {previewImage && <ImageLightbox src={previewImage.src} title={previewImage.title} onClose={() => setPreviewImage(null)} />}
       {editorOpen && <ModalShell title={draft.id ? "ویرایش پیش‌نویس" : "ساخت پیش‌نویس جدید"} eyebrow="صف محتوا" onClose={() => setEditorOpen(false)} footer={<><button className="btn quiet" type="button" onClick={() => setEditorOpen(false)}>انصراف</button><button className="btn accent" type="submit" form="content-editor-form" disabled={!draft.title.trim() || !draft.postText.trim() || draft.postText.length > 280}>{draft.id ? "ذخیره تغییرات" : "افزودن به صف"}</button></>}><form id="content-editor-form" className="modal-form" onSubmit={saveContent}><div className="form-grid"><label>نوع محتوا<input value={draft.type} onChange={(event) => setDraft({ ...draft, type: event.target.value })} /></label><label>زبان<select value={draft.language} onChange={(event) => setDraft({ ...draft, language: event.target.value })}><option>انگلیسی</option><option>فارسی</option><option>اسپانیایی</option><option>عربی</option></select></label><label className="full-row">عنوان داخلی<input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} autoFocus /></label><label className="full-row">خلاصه برای اپراتور<textarea value={draft.body} onChange={(event) => setDraft({ ...draft, body: event.target.value })} rows={3} /></label><label>زمان انتشار<input value={draft.time} onChange={(event) => setDraft({ ...draft, time: event.target.value })} /></label><label>سطح ریسک<select value={draft.risk} onChange={(event) => setDraft({ ...draft, risk: event.target.value as Risk })}><option value="green">کم‌ریسک</option><option value="yellow">نیازمند بررسی</option><option value="red">ارجاع فوری</option></select></label><label className="full-row">منبع<input value={draft.source} onChange={(event) => setDraft({ ...draft, source: event.target.value })} /></label><label className="full-row">متن نهایی برای X<textarea value={draft.postText} onChange={(event) => setDraft({ ...draft, postText: event.target.value })} dir="auto" rows={6} /></label></div><div className={`character-count ${draft.postText.length > 280 ? "over" : ""}`}><span>{draft.postText.length.toLocaleString("fa-IR")} / ۲۸۰ نویسه</span><small>{draft.postText.length > 280 ? "متن باید کوتاه‌تر شود." : "قبل از انتشار، متن توسط اپراتور بررسی می‌شود."}</small></div></form></ModalShell>}
     </section>
   );
