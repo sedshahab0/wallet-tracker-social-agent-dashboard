@@ -238,6 +238,12 @@ body { font-family: "Vazirmatn Variable", Tahoma, Arial, sans-serif; line-height
 .x-account-card small { color: var(--muted); font-size: 9px; }
 .x-account-card strong { font-size: 12px; text-align: right; }
 .x-account-card a { color: var(--accent); font-size: 10px; font-weight: 700; text-decoration: none; white-space: nowrap; }
+.x-connection-status { display: flex; min-height: 42px; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; padding: 9px 10px; border: 1px solid rgba(255,116,23,.18); border-radius: 9px; background: rgba(255,116,23,.04); color: var(--text-2); font-size: 10px; line-height: 1.55; }
+.x-connection-status > span { display: flex; min-width: 0; align-items: center; gap: 7px; }
+.x-connection-status i { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: var(--rose); box-shadow: 0 0 10px rgba(255,116,124,.45); }
+.x-connection-status.connected { border-color: rgba(69,211,154,.22); background: rgba(69,211,154,.055); }.x-connection-status.connected i { background: var(--success); box-shadow: 0 0 10px rgba(69,211,154,.6); }
+.x-connection-status.credit { border-color: rgba(245,184,95,.24); background: rgba(245,184,95,.055); }.x-connection-status.credit i { background: var(--amber); box-shadow: 0 0 10px rgba(245,184,95,.55); }
+.x-connection-status button { flex: 0 0 auto; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: #171717; color: var(--text-2); font-size: 9px; transition: transform var(--motion-fast) var(--ease), border-color var(--motion-fast) ease, color var(--motion-fast) ease; }.x-connection-status button:hover { transform: translateY(-1px); border-color: rgba(255,116,23,.3); color: var(--accent); }.x-connection-status button:disabled { opacity: .55; }
 .input-prefix span { right: 11px; left: auto; }.input-prefix input { padding-right: 27px; padding-left: 10px; direction: ltr; text-align: right; }
 .switch.on i { transform: translateX(-17px); }
 

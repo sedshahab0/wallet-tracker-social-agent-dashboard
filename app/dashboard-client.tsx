@@ -1,7 +1,7 @@
 "use client";
 
 import type { FormEvent, ReactNode } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 type View = "overview" | "replies" | "content" | "sent" | "telegram" | "research" | "budget" | "settings";
@@ -53,6 +53,15 @@ type TelegramConnection = {
   bot?: { name: string; username: string };
   group?: { id: string; title: string; type: string } | null;
   error?: string;
+};
+type XConnection = {
+  configured: boolean;
+  connected: boolean;
+  handle?: string;
+  needsCredit?: boolean;
+  code?: string;
+  error?: string;
+  account?: { id: string; name: string; username: string; profile_image_url?: string; public_metrics?: { followers_count?: number; tweet_count?: number } };
 };
 
 const X_ACCOUNT_HANDLE = "@wallettrackerH";
@@ -804,6 +813,24 @@ function SettingsView() {
     }
   });
   const [saved, setSaved] = useState(false);
+  const [xConnection, setXConnection] = useState<XConnection | null>(null);
+  const [xChecking, setXChecking] = useState(true);
+  const checkXConnection = useCallback(async () => {
+    setXChecking(true);
+    try {
+      const response = await fetch("/api/x", { cache: "no-store" });
+      const payload = await response.json() as XConnection;
+      setXConnection(payload);
+    } catch {
+      setXConnection({ configured: true, connected: false, error: "ارتباط داشبورد با سرویس X برقرار نشد." });
+    } finally {
+      setXChecking(false);
+    }
+  }, []);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void checkXConnection(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [checkXConnection]);
   const saveSettings = () => {
     window.localStorage.setItem("wallet-social-settings", JSON.stringify(settings));
     setSaved(true);
@@ -811,7 +838,7 @@ function SettingsView() {
   };
   return <section>
     <div className="settings-grid">
-      <article className="panel settings-card"><div className="panel-head"><div><span className="eyebrow">اتصال به X</span><h3>پایش Owned Reads</h3></div><button className={`switch ${settings.polling ? "on" : ""}`} onClick={() => setSettings({ ...settings, polling: !settings.polling })} aria-label="فعال یا غیرفعال‌کردن پایش" aria-pressed={settings.polling}><i/></button></div><div className="x-account-card"><span className="avatar">WT</span><div><small>اکانت رسمی پروژه</small><strong dir="ltr">{X_ACCOUNT_HANDLE}</strong></div><a href={X_ACCOUNT_URL} target="_blank" rel="noreferrer">مشاهده در X ↗</a></div><label>فاصله زمانی پایش<select value={settings.interval} onChange={(event) => setSettings({ ...settings, interval: event.target.value })}><option value="120">هر ۲ دقیقه</option><option value="300">هر ۵ دقیقه</option></select></label><label>سقف قطعی ماهانه<div className="input-prefix"><span>$</span><input inputMode="decimal" value={settings.budget} onChange={(event) => setSettings({ ...settings, budget: event.target.value })}/></div></label><div className="settings-note">سامانه مقدار <code>since_id</code> را ذخیره می‌کند و هیچ پاسخ را عمداً دوبار دریافت نمی‌کند.</div></article>
+      <article className="panel settings-card"><div className="panel-head"><div><span className="eyebrow">اتصال به X</span><h3>پایش Owned Reads</h3></div><button className={`switch ${settings.polling ? "on" : ""}`} onClick={() => setSettings({ ...settings, polling: !settings.polling })} aria-label="فعال یا غیرفعال‌کردن پایش" aria-pressed={settings.polling}><i/></button></div><div className="x-account-card"><span className="avatar">WT</span><div><small>اکانت رسمی پروژه</small><strong dir="ltr">{X_ACCOUNT_HANDLE}</strong></div><a href={X_ACCOUNT_URL} target="_blank" rel="noreferrer">مشاهده در X ↗</a></div><div className={`x-connection-status ${xConnection?.connected ? "connected" : xConnection?.needsCredit ? "credit" : "error"}`}><span><i />{xChecking ? "در حال بررسی اتصال زنده…" : xConnection?.connected ? `متصل به @${xConnection.account?.username || "wallettrackerH"}` : xConnection?.needsCredit ? "کلیدها ثبت شده‌اند؛ اعتبار X API صفر است" : xConnection?.error || "اتصال X هنوز تأیید نشده است"}</span><button type="button" onClick={() => void checkXConnection()} disabled={xChecking}>{xChecking ? "بررسی…" : "آزمایش دوباره"}</button></div><label>فاصله زمانی پایش<select value={settings.interval} onChange={(event) => setSettings({ ...settings, interval: event.target.value })}><option value="120">هر ۲ دقیقه</option><option value="300">هر ۵ دقیقه</option></select></label><label>سقف قطعی ماهانه<div className="input-prefix"><span>$</span><input inputMode="decimal" value={settings.budget} onChange={(event) => setSettings({ ...settings, budget: event.target.value })}/></div></label><div className="settings-note">سامانه مقدار <code>since_id</code> را ذخیره می‌کند و هیچ پاسخ را عمداً دوبار دریافت نمی‌کند.</div></article>
       <article className="panel settings-card"><div className="panel-head"><div><span className="eyebrow">قوانین کانتکست</span><h3>غنی‌سازی با Firecrawl</h3></div><button className={`switch ${settings.firecrawl ? "on" : ""}`} onClick={() => setSettings({ ...settings, firecrawl: !settings.firecrawl })} aria-label="فعال یا غیرفعال‌کردن Firecrawl" aria-pressed={settings.firecrawl}><i/></button></div><label className="check-row"><input type="checkbox" checked={settings.lowConfidence} onChange={(event) => setSettings({ ...settings, lowConfidence: event.target.checked })}/><span><strong>پاسخ‌های کم‌اطمینان</strong><small>اطمینان کمتر از ۸۲٪</small></span></label><label className="check-row"><input type="checkbox" checked={settings.externalClaims} onChange={(event) => setSettings({ ...settings, externalClaims: event.target.checked })}/><span><strong>لینک‌ها و ادعاهای خارجی</strong><small>بررسی آدرس‌ها و اطلاعات عمومی روز</small></span></label><label className="check-row"><input type="checkbox" checked={settings.importantAccounts} onChange={(event) => setSettings({ ...settings, importantAccounts: event.target.checked })}/><span><strong>حساب‌های عمومی مهم</strong><small>افزودن پروفایل عمومی و سابقه گفتگو</small></span></label></article>
     </div>
     <div className="settings-savebar"><div><strong>تغییرات تنظیمات</strong><span>پس از بررسی مقادیر، تنظیمات را برای این میز اپراتور ذخیره کنید.</span></div><button className={`btn accent ${saved ? "done" : ""}`} type="button" onClick={saveSettings}>{saved ? "✓ تنظیمات ذخیره شد" : "ذخیره تنظیمات"}</button></div>

@@ -64,6 +64,8 @@ test("keeps the human publishing and Telegram workflows in the dashboard", async
   assert.match(page, /content-editor-form/);
   assert.match(page, /research-request-form/);
   assert.match(page, /\/api\/research/);
+  assert.match(page, /\/api\/x/);
+  assert.match(page, /آزمایش دوباره/);
   assert.match(page, /پژوهش زنده در حال اجراست/);
   assert.match(page, /اعلان تلگرام ارسال شد/);
   assert.match(page, /wallet-social-research-results/);
@@ -131,4 +133,20 @@ test("keeps dashboard credentials server-side and signs the session", async () =
   assert.match(loginRoute, /MAX_ATTEMPTS = 5/);
   assert.match(exampleEnv, /DASHBOARD_PASSWORD=\n/);
   assert.doesNotMatch(`${auth}\n${loginRoute}\n${exampleEnv}`, /\+8DOYWNKDs159A5uzzsSYxu1/);
+});
+
+test("keeps X credentials server-side and exposes guarded live endpoints", async () => {
+  const [statusRoute, mentionsRoute, xApi, exampleEnv] = await Promise.all([
+    readFile(new URL("../app/api/x/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/x/mentions/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/x-api.ts", import.meta.url), "utf8"),
+    readFile(new URL("../.env.example", import.meta.url), "utf8"),
+  ]);
+  assert.match(statusRoute, /hasDashboardSession/);
+  assert.match(mentionsRoute, /hasDashboardSession/);
+  assert.match(mentionsRoute, /since_id/);
+  assert.match(xApi, /process\.env\.X_BEARER_TOKEN/);
+  assert.match(xApi, /api\.x\.com/);
+  assert.match(exampleEnv, /X_BEARER_TOKEN=\n/);
+  assert.doesNotMatch(`${statusRoute}\n${mentionsRoute}\n${xApi}`, /Bearer\s+[A-Za-z0-9%_-]{40,}/);
 });
