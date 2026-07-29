@@ -1,0 +1,12 @@
+[Unit]
+Description=Poll Wallet Tracker owned X mentions every two minutes
+
+[Timer]
+OnBootSec=45s
+OnUnitActiveSec=2min
+AccuracySec=10s
+Persistent=true
+Unit=wallet-x-poller.service
+
+[Install]
+WantedBy=timers.target

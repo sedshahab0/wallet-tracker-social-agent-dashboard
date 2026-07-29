@@ -242,3 +242,28 @@ test("builds an evidence-bound daily manager with Firecrawl and xAI", async () =
   assert.match(timer, /06:15:00 Asia\/Tehran/);
   assert.doesNotMatch(`${manager}\n${imageRoute}\n${exampleEnv}`, /xai-[A-Za-z0-9_-]{20,}/);
 });
+
+test("polls owned X mentions on the server and keeps the reply UI unchanged", async () => {
+  const [pollRoute, inboxRoute, inbox, page, timer] = await Promise.all([
+    readFile(new URL("../app/api/x/poll/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/x/inbox/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/x-inbox.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard-client.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../deploy/wallet-x-poller.timer", import.meta.url), "utf8"),
+  ]);
+  assert.match(pollRoute, /SOCIAL_MANAGER_CRON_SECRET/);
+  assert.match(pollRoute, /timingSafeEqual/);
+  assert.match(inboxRoute, /hasDashboardSession/);
+  assert.match(inbox, /xGetOwned/);
+  assert.match(inbox, /since_id/);
+  assert.match(inbox, /resourceReads >= 5_000/);
+  assert.match(inbox, /2_500/);
+  assert.match(inbox, /4_000/);
+  assert.match(inbox, /notifyBudget/);
+  assert.match(inbox, /api\.x\.ai\/v1\/chat\/completions/);
+  assert.match(inbox, /same language/);
+  assert.match(inbox, /sendMessage/);
+  assert.match(page, /\/api\/x\/inbox/);
+  assert.match(page, /120_000/);
+  assert.match(timer, /OnUnitActiveSec=2min/);
+});

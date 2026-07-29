@@ -955,6 +955,28 @@ export default function DashboardClient() {
   const managedContent = useStoredCollection<ContentItem>("wallet-social-content-items", contentItems);
   const dailyManager = useDailyManagerPlan();
   const setManagedContent = managedContent.setItems;
+  const setManagedReplies = managedReplies.setItems;
+
+  useEffect(() => {
+    let cancelled = false;
+    const syncInbox = async () => {
+      try {
+        const response = await fetch("/api/x/inbox", { cache: "no-store" });
+        const payload = await response.json() as { ok?: boolean; replies?: ReplyItem[] };
+        if (!cancelled && response.ok && payload.ok && payload.replies?.length) {
+          setManagedReplies((current) => {
+            const liveIds = new Set(payload.replies!.map((item) => item.id));
+            return [...payload.replies!, ...current.filter((item) => !liveIds.has(item.id))];
+          });
+        }
+      } catch {
+        // The existing inbox remains usable while the next free sync retries.
+      }
+    };
+    void syncInbox();
+    const timer = window.setInterval(() => void syncInbox(), 120_000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [setManagedReplies]);
 
   useEffect(() => {
     if (!dailyManager.plan) return;
