@@ -91,7 +91,8 @@ const navGroups = [
       { id: "overview" as View, icon: "⌂", label: "امروز چه‌کار کنم؟" },
       { id: "content" as View, icon: "۱", label: "پست آماده" },
       { id: "replies" as View, icon: "۲", label: "پاسخ‌های آماده" },
-      { id: "tasks" as View, icon: "۳", label: "لیست کار امروز" },
+      { id: "growth" as View, icon: "۳", label: "برنامه رشد" },
+      { id: "tasks" as View, icon: "۴", label: "لیست کار امروز" },
       { id: "sent" as View, icon: "✓", label: "کارهای انجام‌شده" },
     ],
   },
@@ -101,7 +102,6 @@ const navGroups = [
     items: [
       { id: "strategy" as View, icon: "◫", label: "منطق و تقویم امروز" },
       { id: "creative" as View, icon: "✦", label: "ساخت محتوای جدید" },
-      { id: "growth" as View, icon: "↗", label: "برنامه رشد" },
       { id: "telegram" as View, icon: "➤", label: "تنظیم اعلان‌ها" },
       { id: "research" as View, icon: "◇", label: "تحقیق زنده" },
       { id: "budget" as View, icon: "▥", label: "اعتبار ۵ دلاری X" },
@@ -404,7 +404,7 @@ function Overview({ onNavigate, manager }: { onNavigate: (view: View) => void; m
         <div><i className="telegram-dot">➤</i><span><strong>تلگرام به اپراتور خبر می‌دهد</strong><small>برای هر کار آماده، لینک مستقیم همین صفحه ارسال می‌شود.</small></span></div>
       </div>
 
-      <details className="manager-shortcuts panel"><summary>ابزارهای مدیر را نشان بده <small>اپراتور معمولاً به این قسمت نیاز ندارد</small></summary><div>{[["strategy","برنامه هفتگی"],["creative","ساخت محتوای جدید"],["growth","برنامه رشد"],["budget","کنترل اعتبار X"],["settings","تنظیمات فنی"]].map(([target,label]) => <button className="btn quiet" key={target} onClick={() => onNavigate(target as View)}>{label}</button>)}</div></details>
+      <details className="manager-shortcuts panel"><summary>ابزارهای مدیر را نشان بده <small>اپراتور معمولاً به این قسمت نیاز ندارد</small></summary><div>{[["strategy","برنامه هفتگی"],["creative","ساخت محتوای جدید"],["budget","کنترل اعتبار X"],["settings","تنظیمات فنی"]].map(([target,label]) => <button className="btn quiet" key={target} onClick={() => onNavigate(target as View)}>{label}</button>)}</div></details>
     </section>
   );
 }

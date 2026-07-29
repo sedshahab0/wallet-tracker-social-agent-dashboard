@@ -202,6 +202,8 @@ test("keeps the operator flow simple and reserves X credit for owned mentions", 
   assert.match(page, /مدیر هوشمند روزانه · داده زنده/);
   assert.match(page, /کارهای اپراتور · از بالا به پایین/);
   assert.match(page, /ابزارهای مدیر · اپراتور نیاز ندارد/);
+  assert.match(page, /پاسخ‌های آماده[\s\S]*برنامه رشد[\s\S]*لیست کار امروز/);
+  assert.doesNotMatch(page, /ساخت محتوای جدید[\s\S]*برنامه رشد[\s\S]*تنظیم اعلان‌ها/);
   assert.match(page, /۵ دلار فقط برای خواندن کامنت‌های جدید/);
   assert.match(page, /۰٫۰۰۱ دلار/);
   assert.match(page, /هشدار اولیه در ۲٫۵۰ دلار/);
