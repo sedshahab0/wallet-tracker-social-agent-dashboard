@@ -11,7 +11,7 @@ export async function POST(request: Request) {
     text?: unknown;
     targetUrl?: unknown;
   } | null;
-  const kind = body?.kind === "reply" ? "reply" : body?.kind === "post" ? "post" : "";
+  const kind = body?.kind === "reply" ? "reply" : body?.kind === "interaction" ? "interaction" : body?.kind === "post" ? "post" : "";
   const text = typeof body?.text === "string" ? body.text.trim() : "";
   const targetUrl = typeof body?.targetUrl === "string" ? body.targetUrl.trim() : "";
   if (!kind || text.length < 12) return json({ ok: false, error: "درخواست تأیید انتشار معتبر نیست." }, 400);

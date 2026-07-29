@@ -1,4 +1,5 @@
 import { hasDashboardSession } from "@/lib/auth";
+import { recordXaiImageUsage } from "@/lib/usage-tracker";
 
 type ImagePayload = { data?: Array<{ url?: string; mime_type?: string }>; error?: { message?: string } };
 const headers = { "cache-control": "no-store, max-age=0", "content-type": "application/json; charset=utf-8" };
@@ -27,6 +28,7 @@ export async function POST(request: Request) {
     if (!bytes.length || bytes.length > 4_500_000) throw new Error("حجم تصویر تولیدشده قابل ذخیره‌سازی نیست.");
     const mimeType = payload.data?.[0]?.mime_type || imageResponse.headers.get("content-type") || "image/jpeg";
     const imageDataUrl = `data:${mimeType};base64,${Buffer.from(bytes).toString("base64")}`;
+    await recordXaiImageUsage().catch(() => undefined);
     return json({ ok: true, imageUrl: imageDataUrl, temporary: false });
   } catch (error) {
     return json({ ok: false, error: error instanceof Error ? error.message : "تولید تصویر ناموفق بود." }, 502);

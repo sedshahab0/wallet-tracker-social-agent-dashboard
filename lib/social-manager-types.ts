@@ -21,6 +21,8 @@ export type AccountState = {
   recentPosts: AccountRecentPost[];
   summaryFa: string;
   scrapedAt: string;
+  intelligenceSummaryFa?: string;
+  engagementTrend?: "up" | "flat" | "down" | "unknown";
 };
 
 export type DailyManagerTask = {
@@ -57,6 +59,20 @@ export type DailyManagerInteraction = {
   comment: string;
   language: string;
   risk: ManagerRisk;
+  reachScore?: number;
+  tier?: "S" | "A" | "B" | "C";
+  topicRelevance?: number;
+  accountTierScore?: number;
+  engagementScore?: number;
+  freshnessScore?: number;
+  engagementLabel?: string;
+  followersLabel?: string;
+  scoreReasonFa?: string;
+  threadScraped?: boolean;
+  threadEnriched?: boolean;
+  commentRegenerated?: boolean;
+  publishVerified?: boolean;
+  matchedUrl?: string;
 };
 
 export type DailyManagerPlan = {

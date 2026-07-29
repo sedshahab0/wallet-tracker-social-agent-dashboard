@@ -1,4 +1,6 @@
 import { hasDashboardSession } from "@/lib/auth";
+import { generateResearchBridgeActions } from "@/lib/research-bridge";
+import { recordFirecrawlUsage } from "@/lib/usage-tracker";
 
 type FirecrawlHit = {
   title?: string;
@@ -141,6 +143,9 @@ async function searchFirecrawl(apiKey: string, query: string) {
       timeout: 45_000,
     }),
     signal: AbortSignal.timeout(55_000),
+  }).then(async (response) => {
+    await recordFirecrawlUsage("search", response.ok).catch(() => undefined);
+    return response;
   });
 }
 
@@ -191,7 +196,18 @@ export async function POST(request: Request) {
       telegramNotified = false;
     }
 
-    return json({ ok: true, result, telegramNotified });
+    let researchBridge = null;
+    try {
+      researchBridge = await generateResearchBridgeActions({
+        topic,
+        score: result.score,
+        sources,
+      });
+    } catch {
+      researchBridge = null;
+    }
+
+    return json({ ok: true, result, telegramNotified, researchBridge });
   } catch (error) {
     const message = error instanceof Error && error.name === "TimeoutError"
       ? "پژوهش بیشتر از زمان مجاز طول کشید؛ دوباره تلاش کنید."

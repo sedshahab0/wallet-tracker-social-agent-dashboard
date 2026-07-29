@@ -31,3 +31,9 @@ test("matches published text with high token overlap", () => {
   assert.equal(textLooksPublished(haystack, "You only need a public wallet address to follow on-chain activity never a seed phrase or private key"), false);
   assert.equal(textLooksPublished(haystack, "completely unrelated airdrop giveaway seed phrase"), false);
 });
+
+test("matches ETH support reply even when punctuation differs", () => {
+  const reply = "Yes—Ethereum is surfaced as available in the current product. You can track public ETH addresses for activity, history, and alerts. Confirm in the live app for your setup.";
+  const profileHaystack = `@wallettrackerH posted: Yes Ethereum is surfaced as available in the current product. You can track public ETH addresses for activity history and alerts.`;
+  assert.equal(textLooksPublished(profileHaystack, reply), true);
+});

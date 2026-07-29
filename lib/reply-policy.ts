@@ -18,6 +18,13 @@ function limitCharacters(value: string, maximum: number) {
   return Array.from(value.trim()).slice(0, maximum).join("");
 }
 
+export function isSemiAutoReady(suggestion: ReplySuggestion) {
+  return suggestion.risk === "green"
+    && suggestion.confidence >= 95
+    && !suggestion.needsHumanReview
+    && suggestion.groundingFacts.length >= 1;
+}
+
 /**
  * Deterministic safety layer applied after the language model. The model may
  * draft prose, but it cannot downgrade security/runtime-sensitive replies or

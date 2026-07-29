@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Wallet Tracker whale watcher every three hours
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=3h
+AccuracySec=5min
+Persistent=true
+Unit=wallet-whale-watcher.service
+
+[Install]
+WantedBy=timers.target

@@ -145,9 +145,10 @@ export async function collectLiveSources(date: string, focus = "") {
   const queries = [
     firecrawlScrape(PRODUCT_WEBSITE_URL, "product"),
     firecrawlSearch(`site:x.com/${own}/status`, "account", { limit: 8, hydrate: true }),
-    firecrawlSearch('site:x.com/*/status ("wallet security" OR "wallet monitoring" OR "on-chain alerts" OR "transaction alerts") -giveaway -airdrop', "x", { limit: 10, tbs: "qdr:w", hydrate: true }),
+    firecrawlSearch('site:x.com/*/status ("wallet security" OR "wallet drainer" OR "seed phrase" OR "whale alert" OR "on-chain alert") -giveaway -airdrop', "x", { limit: 12, tbs: "qdr:w", hydrate: true }),
+    firecrawlSearch('site:x.com/*/status ("metamask" OR "ledger" OR "trezor" OR "wallet tracker" OR "portfolio tracker" OR "transaction alert") -giveaway -airdrop', "x", { limit: 10, tbs: "qdr:w", hydrate: true }),
+    firecrawlSearch('site:x.com/*/status ("crypto wallet" OR "blockchain analytics" OR "onchain monitoring" OR "wallet monitoring") -airdrop -giveaway', "competitor", { limit: 12, tbs: "qdr:w", hydrate: true }),
     firecrawlSearch(`site:x.com/*/status ("Wallet Tracker" OR wallettracker OR @${own}) -giveaway -airdrop`, "x", { limit: 8, tbs: "qdr:w", hydrate: true }),
-    firecrawlSearch('site:x.com/*/status ("portfolio tracker" OR "wallet analytics" OR "whale alert" OR "onchain monitoring") -giveaway -airdrop', "competitor", { limit: 10, tbs: "qdr:w", hydrate: true }),
     firecrawlSearch("crypto wallet monitoring OR on-chain wallet analytics OR transaction alert product competitor", "competitor", { limit: 8, tbs: "qdr:m", hydrate: true, sources: ["news", "web"] }),
     firecrawlSearch(`crypto wallet monitoring transaction alert product news ${date}`, "news", { limit: 8, tbs: "qdr:w", hydrate: true, sources: ["news", "web"] }),
     firecrawlSearch("site:wallettracker.app Wallet Tracker", "product", { limit: 6, hydrate: true }),
@@ -168,7 +169,7 @@ export async function collectLiveSources(date: string, focus = "") {
       seen.add(key);
       return true;
     })
-    .slice(0, 42);
+    .slice(0, 48);
   if (sources.length < 4) throw new Error("منابع زنده کافی برای ساخت برنامه قابل اعتماد پیدا نشد.");
   return { sources, accountState: account.state };
 }
@@ -214,11 +215,19 @@ function evidenceBoundPlan(
   return { ...generated, posts, interactions, signals, tasks };
 }
 
-export async function buildDailyPlan(date: string, sources: LiveSource[], accountState: AccountState, focus = ""): Promise<DailyManagerPlan> {
+export async function buildDailyPlan(
+  date: string,
+  sources: LiveSource[],
+  accountState: AccountState,
+  focus = "",
+  interactionHistoryContext = "",
+  researchBridgeContext = "",
+  accountIntelligenceContext = "",
+): Promise<DailyManagerPlan> {
   const recentPosts = accountState.recentPosts.map((post, index) => `${index + 1}. ${post.postedAt || "unknown time"} · ${post.url}\n${post.text}`).join("\n\n") || "none discoverable";
   const raw = await xaiChatCompletion({
-    system: `You are the full-service X brand manager for Wallet Tracker. The complete [project] source is the binding project-truth document and includes an explicit confidence table, network truth table, safety rules, content policy, and interaction policy. Follow it exactly. Produce a safe, evidence-based daily operating plan for a non-expert human operator. All operator instructions and explanations must be Persian. Public posts and comments should normally be natural English unless the target post is another language. Never invent product capabilities, metrics, partnerships, transactions, networks, availability, news, customer stories, or release dates. Treat [project] as audited first-party facts and all other sources as live public context. Every factual post must cite only supplied source URLs. Keep each X post at most 260 characters. Do not recommend mass following, repetitive comments, engagement bait, financial advice, automated posting, or any X API discovery request. Customer-facing posts must lead with user value and clear outcomes; never mention frameworks, repositories, backend architecture, internal providers or implementation details unless the requested topic is explicitly technical. Use the live own-account state to decide cadence: bootstrap = one truthful intro post; early = light educational posts that do not repeat the exact previous post text; active = continue themes without duplicating recent posts. Pause only when even first-party evidence is insufficient or a real safety risk exists. Schedule 1-2 quality posts maximum and 2-4 meaningful interactions. An interaction is valid only when it points to an exact supplied X status URL (https://x.com/{handle}/status/{id}) and adds a concrete insight or useful question before any product mention. The account field must be the real @handle from that URL. Never exploit a security incident for promotion. Every image prompt must be 16:9, premium black/orange Wallet Tracker visual, directly related to the exact post, no logos of other companies and no tiny text.`,
-    user: `Date: ${date}\nRequested editorial focus: ${focus.trim() || "none; choose from evidence"}\n\nOwn X account state:\nhandle: ${accountState.handle}\nstage: ${accountState.stage}\nsummary: ${accountState.summaryFa}\nrecent public posts:\n${recentPosts}\n\nLive sources collected by Firecrawl:\n${sourceContext(sources)}`,
+    system: `You are the full-service X brand manager for Wallet Tracker. The complete [project] source is the binding project-truth document and includes an explicit confidence table, network truth table, safety rules, content policy, and interaction policy. Follow it exactly. Produce a safe, evidence-based daily operating plan for a non-expert human operator. All operator instructions and explanations must be Persian. Public posts and comments should normally be natural English unless the target post is another language. Never invent product capabilities, metrics, partnerships, transactions, networks, availability, news, customer stories, or release dates. Treat [project] as audited first-party facts and all other sources as live public context. Every factual post must cite only supplied source URLs. Keep each X post at most 260 characters. Do not recommend mass following, repetitive comments, engagement bait, financial advice, automated posting, or any X API discovery request. Customer-facing posts must lead with user value and clear outcomes; never mention frameworks, repositories, backend architecture, internal providers or implementation details unless the requested topic is explicitly technical. Use the live own-account state to decide cadence: bootstrap = one truthful intro post; early = light educational posts that do not repeat the exact previous post text; active = continue themes without duplicating recent posts. Pause only when even first-party evidence is insufficient or a real safety risk exists. Schedule 1-2 quality posts maximum and 2-4 meaningful interactions. Prefer interaction targets from large, high-visibility crypto/wallet accounts (exchanges, on-chain analytics, wallet security alerts, major ecosystem accounts) when the supplied sources include them. An interaction is valid only when it points to an exact supplied X status URL (https://x.com/{handle}/status/{id}) and adds a concrete insight or useful question before any product mention. The account field must be the real @handle from that URL. Never exploit a security incident for promotion. Every image prompt must be 16:9, premium black/orange Wallet Tracker visual, directly related to the exact post, no logos of other companies and no tiny text.`,
+    user: `Date: ${date}\nRequested editorial focus: ${focus.trim() || "none; choose from evidence"}\n\nRecent growth interaction outcomes (avoid duplicate targets/comments):\n${interactionHistoryContext.trim() || "none recorded"}\n\n${accountIntelligenceContext.trim() || "Account intelligence unavailable."}\n\nPending research-to-action bridge (use when evidence supports it; never invent URLs):\n${researchBridgeContext.trim() || "No pending research bridge actions."}\n\nOwn X account state:\nhandle: ${accountState.handle}\nstage: ${accountState.stage}\nsummary: ${accountState.summaryFa}\nrecent public posts:\n${recentPosts}\n\nLive sources collected by Firecrawl:\n${sourceContext(sources)}`,
     schemaName: "wallet_tracker_daily_plan",
     schema: managerSchema,
     timeoutMs: 120_000,

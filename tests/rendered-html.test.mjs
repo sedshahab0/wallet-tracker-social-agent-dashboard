@@ -184,11 +184,24 @@ test("ships the full-service strategy, creative and growth workflows", async () 
   assert.match(page, /هنوز بسته محتوای واقعی ساخته نشده است/);
   assert.doesNotMatch(page, /@carlos_chain|@noor_web3|@chainwatcher|dailyTaskSeed|staticOpportunities|strategyDays/);
   assert.doesNotMatch(page, /رهگیری کیف‌پول‌های سولانا فعال شد|پرسش‌های امنیت کیف‌پول در حال افزایش است|پست جدید آماده انتشار است/);
-  assert.match(page, /اعتبار X برای رشد مصرف نمی‌شود/);
+  assert.match(page, /Agent پیش‌فعال · فاز ۳|رتبه‌بندی خودکار/);
+  assert.match(page, /reachScore|Reach/);
+  assert.match(page, /من این کامنت را گذاشتم/);
+  assert.match(page, /wallet-social-interaction-records-live-v1/);
+  assert.match(page, /\/api\/manager\/interactions\/history/);
+  assert.match(page, /Tier/);
   assert.match(page, /حداکثر ۴ تعامل دستی باکیفیت در روز/);
+  assert.match(page, /Agent پیش‌فعال · فاز ۳/);
+  assert.match(page, /\/api\/manager\/signals/);
+  assert.match(page, /semi-auto-badge|نیمه‌خودکار/);
+  assert.match(page, /research-bridge-banner|پل پژوهش/);
+  assert.match(css, /\.agent-signals-panel/);
+  assert.match(css, /\.semi-auto-badge/);
   assert.match(css, /\.calendar-grid/);
   assert.match(css, /\.creative-pipeline/);
   assert.match(css, /\.opportunity-card/);
+  assert.match(css, /\.match-score\.high/);
+  assert.match(css, /\.reach-meta/);
   assert.match(css, /\.lift-card:hover/);
 });
 
@@ -204,11 +217,11 @@ test("keeps the operator flow simple and reserves X credit for owned mentions", 
   assert.match(page, /ابزارهای مدیر · اپراتور نیاز ندارد/);
   assert.match(page, /پاسخ‌های آماده[\s\S]*برنامه رشد[\s\S]*لیست کار امروز/);
   assert.doesNotMatch(page, /ساخت محتوای جدید[\s\S]*برنامه رشد[\s\S]*تنظیم اعلان‌ها/);
-  assert.match(page, /۵ دلار فقط برای خواندن کامنت‌های جدید/);
-  assert.match(page, /۰٫۰۰۱ دلار/);
-  assert.match(page, /هشدار اولیه در ۲٫۵۰ دلار/);
-  assert.match(page, /هشدار مهم در ۴ دلار/);
-  assert.match(page, /توقف در ۴٫۹۹ دلار/);
+  assert.match(page, /مصرف API و اعتبار/);
+  assert.match(page, /\/api\/manager\/usage/);
+  assert.match(page, /Grok · xAI/);
+  assert.match(page, /Firecrawl/);
+  assert.match(page, /Owned Reads/);
   assert.match(statusRoute, /must never spend X credits/);
   assert.doesNotMatch(statusRoute, /resolveXAccount|xGet/);
   assert.match(mentionsRoute, /xAccountId/);
@@ -232,7 +245,7 @@ test("opens generated content images in an accessible lightbox", async () => {
 });
 
 test("builds an evidence-bound daily manager with Firecrawl and xAI", async () => {
-  const [manager, firecrawl, xai, accountState, planRoute, cronRoute, imageRoute, proxyRoute, projectKnowledge, generatedContext, page, exampleEnv, timer] = await Promise.all([
+  const [manager, firecrawl, xai, accountState, planRoute, cronRoute, imageRoute, proxyRoute, projectKnowledge, generatedContext, page, exampleEnv, timer, runner, scorer, registry, historyLib, historyRoute, verifyRoute] = await Promise.all([
     readFile(new URL("../lib/social-manager.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/firecrawl.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/xai.ts", import.meta.url), "utf8"),
@@ -246,6 +259,12 @@ test("builds an evidence-bound daily manager with Firecrawl and xAI", async () =
     readFile(new URL("../app/dashboard-client.tsx", import.meta.url), "utf8"),
     readFile(new URL("../.env.example", import.meta.url), "utf8"),
     readFile(new URL("../deploy/wallet-social-manager.timer", import.meta.url), "utf8"),
+    readFile(new URL("../lib/daily-manager-runner.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/interaction-scorer.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/influence-registry.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/interaction-history.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/manager/interactions/history/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/x/verify/route.ts", import.meta.url), "utf8"),
   ]);
   assert.match(firecrawl, /api\.firecrawl\.dev\/v2/);
   assert.match(manager, /firecrawlScrape/);
@@ -264,7 +283,8 @@ test("builds an evidence-bound daily manager with Firecrawl and xAI", async () =
   assert.match(projectKnowledge, /PROJECT_CONTEXT_MARKDOWN/);
   assert.match(generatedContext, /Transaction alerts/);
   assert.match(generatedContext, /Never ask for or accept a seed phrase/);
-  assert.match(xai, /api\.x\.ai\/v1\/chat\/completions/);
+  assert.match(xai, /recordXaiChatUsage/);
+  assert.match(xai, /usage\?\.prompt_tokens/);
   assert.match(xai, /grok-4\.5/);
   assert.match(xai, /reasoning_effort/);
   assert.match(xai, /medium/);
@@ -275,7 +295,7 @@ test("builds an evidence-bound daily manager with Firecrawl and xAI", async () =
   assert.match(cronRoute, /timingSafeEqual/);
   assert.match(cronRoute, /SOCIAL_MANAGER_CRON_SECRET/);
   assert.match(imageRoute, /api\.x\.ai\/v1\/images\/generations/);
-  assert.match(imageRoute, /grok-imagine-image/);
+  assert.match(imageRoute, /recordXaiImageUsage/);
   assert.match(imageRoute, /data:\$\{mimeType\};base64/);
   assert.match(page, /مدیر هوشمند روزانه · داده زنده/);
   assert.match(page, /Firecrawl در حال بررسی X|وضعیت زنده اکانت رسمی/);
@@ -286,17 +306,36 @@ test("builds an evidence-bound daily manager with Firecrawl and xAI", async () =
   assert.match(exampleEnv, /XAI_REASONING_EFFORT=medium/);
   assert.match(exampleEnv, /SOCIAL_MANAGER_CRON_SECRET=\n/);
   assert.match(timer, /06:15:00 Asia\/Tehran/);
+  assert.match(runner, /enrichPlanInteractions/);
+  assert.match(runner, /writeDailyPlan\(draftPlan\)/);
+  assert.match(page, /tryReadCachedPlan|postSettled/);
+  assert.match(page, /بازسازی کامل نشد؛ برنامه قبلی هنوز قابل استفاده است/);
+  assert.match(scorer, /reachScore|scoreInteraction|enrichPlanInteractions/);
+  assert.match(registry, /WhaleAlert|tierFromFollowerCount/);
+  assert.match(historyLib, /historySummaryForPrompt|wasPostRecentlyEngaged/);
+  assert.match(historyRoute, /appendInteractionRecord/);
+  assert.match(verifyRoute, /interaction/);
+  assert.match(runner, /readInteractionHistory/);
+  assert.match(runner, /readResearchBridge|researchBridgeForPrompt/);
+  assert.match(runner, /accountIntelligenceContext|accountIntelligenceForPrompt/);
+  assert.match(scorer, /regenerateInteractionComment|shouldSkipInteraction/);
+  assert.match(manager, /Pending research-to-action bridge/);
+  assert.match(exampleEnv, /WHALE_WATCHER_STATE_PATH/);
+  assert.match(exampleEnv, /RESEARCH_BRIDGE_STATE_PATH/);
+  assert.match(manager, /wallet drainer|onchain monitoring/);
+  assert.match(manager, /Recent growth interaction outcomes/);
   assert.doesNotMatch(`${manager}\n${xai}\n${imageRoute}\n${exampleEnv}`, /xai-[A-Za-z0-9_-]{20,}/);
 });
 
 test("polls owned X mentions and resolves real Twitter handles via Firecrawl", async () => {
-  const [pollRoute, inboxRoute, inbox, page, timer, verifyRoute] = await Promise.all([
+  const [pollRoute, inboxRoute, inbox, page, timer, verifyRoute, publishVerify] = await Promise.all([
     readFile(new URL("../app/api/x/poll/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/x/inbox/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/x-inbox.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard-client.tsx", import.meta.url), "utf8"),
     readFile(new URL("../deploy/wallet-x-poller.timer", import.meta.url), "utf8"),
     readFile(new URL("../app/api/x/verify/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/publish-verify.ts", import.meta.url), "utf8"),
   ]);
   assert.match(pollRoute, /SOCIAL_MANAGER_CRON_SECRET/);
   assert.match(pollRoute, /timingSafeEqual/);
@@ -316,10 +355,73 @@ test("polls owned X mentions and resolves real Twitter handles via Firecrawl", a
   assert.match(inbox, /applyReplySafety/);
   assert.match(inbox, /sendMessage/);
   assert.match(verifyRoute, /verifyPublication/);
+  assert.match(publishVerify, /verifyReplyPublication|searchOwnTimeline/);
+  assert.match(publishVerify, /verifyInteractionPublication/);
   assert.match(page, /\/api\/x\/inbox/);
   assert.match(page, /\/api\/x\/verify/);
   assert.match(page, /tweetUrl/);
   assert.match(page, /آیدی توییتر|dir="ltr"/);
-  assert.match(page, /120_000/);
+  assert.match(page, /nextPollAtRef/);
+  assert.match(page, /pollSecondsLeft/);
   assert.match(timer, /OnUnitActiveSec=2min/);
+});
+
+test("tracks Grok and Firecrawl usage for the manager budget page", async () => {
+  const [usageTracker, usageRoute, firecrawl, page, exampleEnv] = await Promise.all([
+    readFile(new URL("../lib/usage-tracker.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/manager/usage/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/firecrawl.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard-client.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../.env.example", import.meta.url), "utf8"),
+  ]);
+  assert.match(usageTracker, /recordXaiChatUsage/);
+  assert.match(usageTracker, /recordFirecrawlUsage/);
+  assert.match(usageTracker, /fetchFirecrawlLiveCredits/);
+  assert.match(usageRoute, /hasDashboardSession/);
+  assert.match(usageRoute, /getUsageSummary/);
+  assert.match(firecrawl, /recordFirecrawlUsage/);
+  assert.match(page, /\/api\/manager\/usage/);
+  assert.match(page, /توکن مصرف‌شده/);
+  assert.match(page, /اعتبار زنده Firecrawl/);
+  assert.match(page, /مانده \{xaiRemaining/);
+  assert.match(page, /tokensRemaining/);
+  assert.match(page, /BudgetViewSkeleton/);
+  assert.match(page, /wallet-social-usage-cache-v1/);
+  assert.match(page, /readUsageCache/);
+  assert.match(page, /recoverPlan|در حال بازیابی برنامه/);
+  assert.match(page, /بازسازی کامل نشد؛ برنامه قبلی هنوز قابل استفاده است/);
+  assert.match(exampleEnv, /XAI_MONTHLY_TOKEN_BUDGET=500000/);
+  assert.match(exampleEnv, /FIRECRAWL_MONTHLY_CREDIT_BUDGET=3000/);
+  assert.match(usageTracker, /mutationQueue/);
+  assert.match(usageTracker, /tokensRemaining/);
+});
+
+test("ships phase 3 proactive agent modules and whale watcher cron", async () => {
+  const [whaleWatcher, whaleRunner, whaleRoute, signalsRoute, researchBridge, researchRoute, replyPolicy, inbox, timer, service, exampleEnv] = await Promise.all([
+    readFile(new URL("../lib/whale-watcher.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/whale-watcher-runner.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/manager/whale-watch/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/manager/signals/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/research-bridge.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/research/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/reply-policy.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/x-inbox.ts", import.meta.url), "utf8"),
+    readFile(new URL("../deploy/wallet-whale-watcher.timer", import.meta.url), "utf8"),
+    readFile(new URL("../deploy/wallet-whale-watcher.service", import.meta.url), "utf8"),
+    readFile(new URL("../.env.example", import.meta.url), "utf8"),
+  ]);
+  assert.match(whaleWatcher, /runWhaleWatcher|WhaleAlert/);
+  assert.match(whaleRunner, /sendTelegramMessage/);
+  assert.match(whaleRoute, /runWhaleWatcherJob/);
+  assert.match(whaleRoute, /SOCIAL_MANAGER_CRON_SECRET/);
+  assert.match(signalsRoute, /readWhaleWatcherState/);
+  assert.match(signalsRoute, /readResearchBridge/);
+  assert.match(signalsRoute, /isSemiAutoReady/);
+  assert.match(researchBridge, /generateResearchBridgeActions/);
+  assert.match(researchRoute, /generateResearchBridgeActions/);
+  assert.match(replyPolicy, /isSemiAutoReady/);
+  assert.match(inbox, /semiAutoReady|notifySemiAutoReplies/);
+  assert.match(timer, /OnUnitActiveSec=3h/);
+  assert.match(service, /\/api\/manager\/whale-watch/);
+  assert.match(exampleEnv, /ACCOUNT_INTELLIGENCE_PATH/);
 });

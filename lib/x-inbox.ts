@@ -1,4 +1,4 @@
-import { applyReplySafety } from "@/lib/reply-policy";
+import { applyReplySafety, isSemiAutoReady } from "@/lib/reply-policy";
 import { firecrawlScrapeRaw } from "@/lib/firecrawl";
 import { PROJECT_CONTEXT_MARKDOWN, PROJECT_CONTEXT_REVISION } from "@/lib/project-knowledge";
 import { xaiChatCompletion } from "@/lib/xai";
@@ -14,7 +14,7 @@ type StoredReply = {
   id: string; handle: string; avatar: string; language: string; age: string; sentiment: string;
   risk: "green" | "yellow" | "red"; confidence: number; original: string; translation: string;
   answer: string; answerTranslation: string; groundingFacts?: string[]; reviewReason?: string;
-  contextRevision?: string; liveContextUsed?: boolean; tweetUrl?: string; authorId?: string;
+  contextRevision?: string; liveContextUsed?: boolean; tweetUrl?: string; authorId?: string; semiAutoReady?: boolean;
 };
 type PendingMention = Mention;
 type InboxState = { sinceId: string; resourceReads: number; budgetAlerts: string[]; replies: StoredReply[]; pending: PendingMention[]; updatedAt: string };
@@ -104,6 +104,27 @@ async function suggestReplies(pending: PendingMention[], contexts: MentionContex
   };
 }
 
+async function notifySemiAutoReplies(request: Request, replies: StoredReply[]) {
+  const ready = replies.filter((item) => item.semiAutoReady);
+  if (!ready.length) return 0;
+  const dashboardBase = process.env.NEXT_PUBLIC_DASHBOARD_URL?.trim() || new URL(request.url).origin;
+  let sent = 0;
+  for (const reply of ready.slice(0, 3)) {
+    const response = await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN?.trim()}/sendMessage`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        chat_id: process.env.TELEGRAM_CHAT_ID?.trim(),
+        text: `⚡ پاسخ نیمه‌خودکار آماده است\n${reply.handle}\nاطمینان ${reply.confidence}٪\n${reply.answer.slice(0, 180)}`,
+        reply_markup: { inline_keyboard: [[{ text: "بازکردن صندوق پاسخ‌ها", url: new URL("/replies", dashboardBase).toString() }]] },
+      }),
+      signal: AbortSignal.timeout(10_000),
+    }).catch(() => null);
+    if (response?.ok) sent += 1;
+  }
+  return sent;
+}
+
 async function notifyReplies(request: Request, count: number) {
   const token = process.env.TELEGRAM_BOT_TOKEN?.trim();
   const chatId = process.env.TELEGRAM_CHAT_ID?.trim();
@@ -191,11 +212,13 @@ export async function pollOwnedMentions(request: Request) {
       liveContextUsed: suggestions.liveContextIds.has(mention.id),
       tweetUrl,
       authorId: mention.author_id,
+      semiAutoReady: isSemiAutoReady(guarded),
     } satisfies StoredReply];
   });
   const createdIds = new Set(created.map((item) => item.id));
   state = { ...state, replies: [...created, ...state.replies.filter((item) => !createdIds.has(item.id))].slice(0, 200), pending: [], updatedAt: new Date().toISOString() };
   await writeXInbox(state);
   const telegramNotified = await notifyReplies(request, created.length).catch(() => false);
-  return { state, newReplies: created.length, stopped: false, telegramNotified, account: { id: xAccountId(), username: xAccountUsername() } };
+  const semiAutoNotified = await notifySemiAutoReplies(request, created).catch(() => 0);
+  return { state, newReplies: created.length, stopped: false, telegramNotified, semiAutoNotified, account: { id: xAccountId(), username: xAccountUsername() } };
 }
