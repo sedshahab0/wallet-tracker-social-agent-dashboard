@@ -291,13 +291,14 @@ test("builds an evidence-bound daily manager with Firecrawl and xAI", async () =
 });
 
 test("polls owned X mentions and resolves real Twitter handles via Firecrawl", async () => {
-  const [pollRoute, inboxRoute, inbox, page, timer, verifyRoute] = await Promise.all([
+  const [pollRoute, inboxRoute, inbox, page, timer, verifyRoute, publishVerify] = await Promise.all([
     readFile(new URL("../app/api/x/poll/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/x/inbox/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/x-inbox.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard-client.tsx", import.meta.url), "utf8"),
     readFile(new URL("../deploy/wallet-x-poller.timer", import.meta.url), "utf8"),
     readFile(new URL("../app/api/x/verify/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/publish-verify.ts", import.meta.url), "utf8"),
   ]);
   assert.match(pollRoute, /SOCIAL_MANAGER_CRON_SECRET/);
   assert.match(pollRoute, /timingSafeEqual/);
@@ -317,6 +318,7 @@ test("polls owned X mentions and resolves real Twitter handles via Firecrawl", a
   assert.match(inbox, /applyReplySafety/);
   assert.match(inbox, /sendMessage/);
   assert.match(verifyRoute, /verifyPublication/);
+  assert.match(publishVerify, /verifyReplyPublication|searchOwnTimeline/);
   assert.match(page, /\/api\/x\/inbox/);
   assert.match(page, /\/api\/x\/verify/);
   assert.match(page, /tweetUrl/);

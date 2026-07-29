@@ -89,6 +89,9 @@ export function accountStageFromPosts(postCount: number): "bootstrap" | "early" 
 export function normalizeComparableText(value: string) {
   return value
     .toLocaleLowerCase()
+    .normalize("NFKC")
+    .replace(/[\u2013\u2014\u2212]/g, " ")
+    .replace(/[\u2018\u2019\u201C\u201D]/g, "")
     .replace(/https?:\/\/\S+/g, " ")
     .replace(/[^\p{L}\p{N}\s]/gu, " ")
     .replace(/\s+/g, " ")
