@@ -454,6 +454,7 @@ p, h1, h2, h3, strong, small, span { overflow-wrap: anywhere; }
 .nav-link.active b { animation: badge-pop 380ms var(--ease-soft) both; }
 .refresh-button > span { display: inline-block; }
 .refresh-button.spinning > span { animation: rotate-soft 720ms linear infinite; }
+.refresh-meta { color: var(--muted); font-size: 9px; white-space: nowrap; }
 .system-pill i, .live-pill i, .status-large i { animation: pulse 2.3s ease-in-out infinite; }
 
 .reply-row, .inbox-item, .telegram-message, .notification-rule, .policy-row, .history-row, .agent-list > div, .signal-list > div { animation: item-in 440ms var(--ease-soft) backwards; }

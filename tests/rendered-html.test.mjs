@@ -66,7 +66,6 @@ test("keeps the human publishing and Telegram workflows in the dashboard", async
   assert.match(page, /wallet-social-sent-replies/);
   assert.match(page, /wallet-social-content-items/);
   assert.match(page, /wallet-social-reply-items/);
-  assert.match(page, /wallet-social-settings/);
   assert.match(page, /reply-editor-form/);
   assert.match(page, /content-editor-form/);
   assert.match(page, /research-request-form/);
@@ -75,7 +74,7 @@ test("keeps the human publishing and Telegram workflows in the dashboard", async
   assert.match(page, /بررسی تنظیمات/);
   assert.match(page, /پژوهش زنده در حال اجراست/);
   assert.match(page, /اعلان تلگرام ارسال شد/);
-  assert.match(page, /wallet-social-research-results/);
+  assert.match(page, /role="status" aria-live="polite"/);
   assert.match(page, /aria-modal="true"/);
   assert.match(page, /event\.key === "Escape"/);
   assert.match(page, /transitionPhase/);
@@ -151,8 +150,10 @@ test("keeps X credentials server-side and exposes guarded live endpoints", async
   ]);
   assert.match(statusRoute, /hasDashboardSession/);
   assert.match(mentionsRoute, /hasDashboardSession/);
-  assert.match(mentionsRoute, /since_id/);
-  assert.match(xApi, /process\.env\.X_BEARER_TOKEN/);
+  assert.match(mentionsRoute, /readXInbox/);
+  assert.doesNotMatch(mentionsRoute, /xGetOwned|api\.x\.com/);
+  assert.match(xApi, /process\.env\.X_ACCESS_TOKEN/);
+  assert.match(xApi, /The sole paid X request in this product/);
   assert.match(xApi, /api\.x\.com/);
   assert.match(exampleEnv, /X_BEARER_TOKEN=\n/);
   assert.doesNotMatch(`${statusRoute}\n${mentionsRoute}\n${xApi}`, /Bearer\s+[A-Za-z0-9%_-]{40,}/);
@@ -173,7 +174,7 @@ test("ships the full-service strategy, creative and growth workflows", async () 
   assert.match(page, /کارهای امروز/);
   assert.match(page, /استودیوی محتوا/);
   assert.match(page, /رشد و تعامل/);
-  assert.match(page, /wallet-social-daily-tasks-live-v2/);
+  assert.match(page, /wallet-social-daily-tasks-\$\{plan\.date\}/);
   assert.match(page, /wallet-social-last-creative-brief-live-v2/);
   assert.match(page, /هیچ وظیفه آزمایشی نمایش داده نمی‌شود/);
   assert.match(page, /فرصت تعامل واقعی پیدا نشده است/);
@@ -181,7 +182,7 @@ test("ships the full-service strategy, creative and growth workflows", async () 
   assert.doesNotMatch(page, /@carlos_chain|@noor_web3|@chainwatcher|dailyTaskSeed|staticOpportunities|strategyDays/);
   assert.doesNotMatch(page, /رهگیری کیف‌پول‌های سولانا فعال شد|پرسش‌های امنیت کیف‌پول در حال افزایش است|پست جدید آماده انتشار است/);
   assert.match(page, /اعتبار X برای رشد مصرف نمی‌شود/);
-  assert.match(page, /شباهت با کامنت‌های قبلی کمتر از ۷۲٪/);
+  assert.match(page, /حداکثر ۴ تعامل دستی باکیفیت در روز/);
   assert.match(css, /\.calendar-grid/);
   assert.match(css, /\.creative-pipeline/);
   assert.match(css, /\.opportunity-card/);
@@ -202,13 +203,12 @@ test("keeps the operator flow simple and reserves X credit for owned mentions", 
   assert.match(page, /۰٫۰۰۱ دلار/);
   assert.match(page, /هشدار اولیه در ۲٫۵۰ دلار/);
   assert.match(page, /هشدار مهم در ۴ دلار/);
-  assert.match(page, /توقف قطعی در ۵ دلار/);
+  assert.match(page, /توقف در ۴٫۹۹ دلار/);
   assert.match(statusRoute, /must never spend X credits/);
   assert.doesNotMatch(statusRoute, /resolveXAccount|xGet/);
-  assert.match(mentionsRoute, /\/mentions\?/);
   assert.match(mentionsRoute, /xAccountId/);
-  assert.match(mentionsRoute, /xGetOwned/);
-  assert.doesNotMatch(mentionsRoute, /resolveXAccount|users\/by\/username/);
+  assert.match(mentionsRoute, /readXInbox/);
+  assert.doesNotMatch(mentionsRoute, /xGetOwned|resolveXAccount|users\/by\/username/);
   assert.match(xApi, /X_ACCOUNT_ID/);
   assert.match(xApi, /oauth_signature_method: "HMAC-SHA1"/);
   assert.match(xApi, /X_ACCESS_TOKEN_SECRET/);
@@ -227,13 +227,14 @@ test("opens generated content images in an accessible lightbox", async () => {
 });
 
 test("builds an evidence-bound daily manager with Firecrawl and xAI", async () => {
-  const [manager, planRoute, cronRoute, imageRoute, proxyRoute, projectKnowledge, page, exampleEnv, timer] = await Promise.all([
+  const [manager, planRoute, cronRoute, imageRoute, proxyRoute, projectKnowledge, generatedContext, page, exampleEnv, timer] = await Promise.all([
     readFile(new URL("../lib/social-manager.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/manager/daily-plan/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/manager/run/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/manager/image/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/firecrawl-proxy/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/project-knowledge.ts", import.meta.url), "utf8"),
+    readFile(new URL("../knowledge/PROJECT_CONTEXT.md", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard-client.tsx", import.meta.url), "utf8"),
     readFile(new URL("../.env.example", import.meta.url), "utf8"),
     readFile(new URL("../deploy/wallet-social-manager.timer", import.meta.url), "utf8"),
@@ -250,7 +251,9 @@ test("builds an evidence-bound daily manager with Firecrawl and xAI", async () =
   assert.doesNotMatch(manager, /xGet|resolveXAccount|api\.x\.com/);
   assert.match(proxyRoute, /operation === "scrape"/);
   assert.match(proxyRoute, /scrapeOptions/);
-  assert.match(projectKnowledge, /real-time notifications for new transactions/);
+  assert.match(projectKnowledge, /PROJECT_CONTEXT_MARKDOWN/);
+  assert.match(generatedContext, /Transaction alerts/);
+  assert.match(generatedContext, /Never ask for or accept a seed phrase/);
   assert.match(manager, /api\.x\.ai\/v1\/chat\/completions/);
   assert.match(manager, /json_schema/);
   assert.match(manager, /evidenceBoundPlan/);
@@ -284,12 +287,13 @@ test("polls owned X mentions on the server and keeps the reply UI unchanged", as
   assert.match(inboxRoute, /hasDashboardSession/);
   assert.match(inbox, /xGetOwned/);
   assert.match(inbox, /since_id/);
-  assert.match(inbox, /resourceReads >= 5_000/);
+  assert.match(inbox, /HARD_STOP_RESOURCE_READS = 4_990/);
   assert.match(inbox, /2_500/);
   assert.match(inbox, /4_000/);
   assert.match(inbox, /notifyBudget/);
   assert.match(inbox, /api\.x\.ai\/v1\/chat\/completions/);
   assert.match(inbox, /same language/);
+  assert.match(inbox, /applyReplySafety/);
   assert.match(inbox, /sendMessage/);
   assert.match(page, /\/api\/x\/inbox/);
   assert.match(page, /120_000/);

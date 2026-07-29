@@ -21,6 +21,10 @@ type ReplyItem = {
   translation: string;
   answer: string;
   answerTranslation: string;
+  groundingFacts?: string[];
+  reviewReason?: string;
+  contextRevision?: string;
+  liveContextUsed?: boolean;
 };
 type ContentItem = {
   id: string;
@@ -71,7 +75,6 @@ type XConnection = {
 
 const X_ACCOUNT_HANDLE = "@wallettrackerH";
 const X_ACCOUNT_URL = "https://x.com/wallettrackerH";
-const SETTINGS_DEFAULTS = { polling: true, firecrawl: true, interval: "120", budget: "5.00", lowConfidence: true, externalClaims: true, importantAccounts: true };
 
 const navGroups = [
   {
@@ -88,7 +91,7 @@ const navGroups = [
     label: "ابزارهای مدیر · اپراتور نیاز ندارد",
     collapsible: true,
     items: [
-      { id: "strategy" as View, icon: "◫", label: "برنامه هفتگی" },
+      { id: "strategy" as View, icon: "◫", label: "منطق و تقویم امروز" },
       { id: "creative" as View, icon: "✦", label: "ساخت محتوای جدید" },
       { id: "growth" as View, icon: "↗", label: "برنامه رشد" },
       { id: "telegram" as View, icon: "➤", label: "تنظیم اعلان‌ها" },
@@ -101,7 +104,7 @@ const navGroups = [
 
 const viewMeta: Record<View, { title: string; sub: string }> = {
   overview: { title: "کارهای امروز", sub: "فقط از مرحله ۱ شروع کنید و دکمه نارنجی را بزنید." },
-  strategy: { title: "استراتژی و تقویم", sub: "پلن ماهانه، موضوع‌های هفتگی و زمان دقیق اجرای روزانه" },
+  strategy: { title: "استراتژی و تقویم", sub: "منطق تصمیم و زمان دقیق اقدام‌های واقعی امروز" },
   tasks: { title: "لیست کار امروز", sub: "هر کار را انجام دهید، سپس تیک همان ردیف را بزنید." },
   creative: { title: "استودیوی محتوا", sub: "ساخت بسته یکپارچه متن، ترجمه، تصویر و زمان انتشار" },
   growth: { title: "رشد و تعامل", sub: "اکانت‌ها، گفتگوها و پاسخ‌های هدفمند با کنترل ضداسپم" },
@@ -111,7 +114,7 @@ const viewMeta: Record<View, { title: string; sub: string }> = {
   telegram: { title: "اعلان‌های تلگرام", sub: "هشدارها، لینک‌های مستقیم و قوانین اطلاع‌رسانی گروه اپراتورها" },
   research: { title: "پژوهش زنده", sub: "سیگنال‌های منتخب Firecrawl برای تصمیم‌گیری محتوایی" },
   budget: { title: "اعتبار X برای خواندن کامنت‌ها", sub: "تمام ۵ دلار فقط برای Owned Reads منشن‌های اکانت اصلی رزرو شده است." },
-  settings: { title: "تنظیمات", sub: "فاصله پایش، قوانین تأیید و محدودیت‌های هزینه را مدیریت کنید." },
+  settings: { title: "تنظیمات", sub: "سیاست ثابت پایش، تأیید انسانی و محدودیت هزینه را مشاهده کنید." },
 };
 
 const viewRoutes: Record<View, string> = {
@@ -227,7 +230,7 @@ function useDailyManagerPlan() {
     setStage("برنامه زنده امروز آماده اجراست");
   }, []);
 
-  const load = useCallback(async (force = false) => {
+  const load = useCallback(async (force = false, focus = "") => {
     setLoading(true);
     setError("");
     setStage(force ? "در حال جمع‌آوری دوباره داده‌های زنده X و وب…" : "در حال دریافت برنامه هوشمند امروز…");
@@ -235,7 +238,7 @@ function useDailyManagerPlan() {
       let response = await fetch("/api/manager/daily-plan", { cache: "no-store" });
       if (response.status === 404 || force) {
         setStage("Firecrawl در حال بررسی X، اخبار و منابع محصول است…");
-        response = await fetch("/api/manager/daily-plan", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ force }) });
+        response = await fetch("/api/manager/daily-plan", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ force, focus }) });
       }
       const payload = await response.json() as { ok?: boolean; plan?: DailyManagerPlan; error?: string };
       if (!response.ok || !payload.ok || !payload.plan) throw new Error(payload.error || "برنامه امروز دریافت نشد.");
@@ -251,7 +254,16 @@ function useDailyManagerPlan() {
   }, [generateImages]);
 
   useEffect(() => { const timer = window.setTimeout(() => void load(false), 0); return () => window.clearTimeout(timer); }, [load]);
-  return { plan, loading, error, stage, imageErrors, regenerate: () => load(true), retryImages: () => plan ? generateImages(plan, true) : Promise.resolve() };
+  return {
+    plan,
+    loading,
+    error,
+    stage,
+    imageErrors,
+    reload: () => load(false),
+    regenerate: (focus = "") => load(true, focus),
+    retryImages: () => plan ? generateImages(plan, true) : Promise.resolve(),
+  };
 }
 
 function ModalShell({ title, eyebrow, children, footer, onClose, closeDisabled = false }: { title: string; eyebrow: string; children: ReactNode; footer: ReactNode; onClose: () => void; closeDisabled?: boolean }) {
@@ -347,7 +359,7 @@ function Overview({ onNavigate, manager }: { onNavigate: (view: View) => void; m
         <div className="today-clock"><span>{plan ? "هدف امروز" : "وضعیت"}</span><strong>{plan?.publishDecision === "pause" ? "توقف انتشار" : plan ? `${plan.tasks.length.toLocaleString("fa-IR")} کار` : "در حال تحلیل"}</strong><small>{plan?.todayGoal || stage}</small></div>
       </div>
 
-      <div className={`manager-live-strip panel ${error ? "has-error" : ""}`}><div><i className="status-dot"/><span><strong>{stage}</strong><small>{plan ? `آخرین تحلیل: ${new Date(plan.generatedAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" })} · ${plan.sources.length.toLocaleString("fa-IR")} منبع زنده` : error || "این فرایند در اولین ورود هر روز خودکار اجرا می‌شود."}</small></span></div><button className="btn quiet" disabled={loading} onClick={() => void regenerate()}>{loading ? "در حال ساخت…" : "بازسازی با داده تازه ↻"}</button></div>
+      <div className={`manager-live-strip panel ${error ? "has-error" : ""}`}><div><i className="status-dot"/><span><strong>{stage}</strong><small>{plan ? `آخرین تحلیل: ${new Date(plan.generatedAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" })} · ${plan.sources.length.toLocaleString("fa-IR")} منبع زنده · دانش پروژه ${plan.contextRevision.slice(0, 8)}` : error || "این فرایند در اولین ورود هر روز خودکار اجرا می‌شود."}</small></span></div><button className="btn quiet" disabled={loading} onClick={() => void regenerate()}>{loading ? "در حال ساخت…" : "بازسازی با داده تازه ↻"}</button></div>
 
       {plan && <article className={`publish-decision panel ${plan.publishDecision}`}><span>{plan.publishDecision === "publish" ? "امروز منتشر می‌کنیم" : plan.publishDecision === "light" ? "امروز سبک منتشر می‌کنیم" : "امروز پست تازه نمی‌گذاریم"}</span><strong>{plan.publishReason}</strong></article>}
 
@@ -451,13 +463,13 @@ function RepliesView({ replyItems, onRepliesChange, sentIds, onMarkSent }: { rep
           <div className="answer-top"><div><span className="eyebrow">پاسخ پیشنهادی · {reply.language}</span><h3>آماده بررسی انسانی</h3></div><span className="confidence">اطمینان {reply.confidence}٪</span></div>
           <div className="answer-text" dir="auto">{reply.answer}</div>
           <div className="translation answer-translation"><span>ترجمه پاسخ</span><p dir="rtl">{reply.answerTranslation}</p></div>
-          <div className="source-strip"><span>منبع ورودی</span><b>منشن واقعی اکانت در X</b><b>پاسخ پیشنهادی مدیر هوشمند</b></div>
+          <div className="source-strip"><span>منبع پاسخ</span><b>منشن واقعی اکانت در X</b><b>{reply.liveContextUsed ? "کانتکست عمومی گفتگو با Firecrawl" : "متن مستقیم منشن"}</b><b title={reply.groundingFacts?.join(" · ") || reply.reviewReason || "دانش تأییدشده پروژه"}>دانش پروژه · {reply.contextRevision?.slice(0, 8) || "نسخه جاری"}</b></div>
           <div className="operator-steps" aria-label="مراحل اپراتور"><span><b>۱</b> پاسخ را کپی کن</span><span><b>۲</b> گفتگو را در X باز کن</span><span><b>۳</b> ارسال را ثبت کن</span></div>
           <div className="answer-actions">
             <button className="btn quiet" onClick={openEditor}>ویرایش پاسخ</button>
             <button className={`btn quiet ${escalated.ids.includes(reply.id) ? "done" : ""}`} disabled={escalated.ids.includes(reply.id)} onClick={escalateReply}>{escalated.ids.includes(reply.id) ? "✓ ارجاع شد" : "ارجاع به مدیر"}</button>
             <button className="btn accent" onClick={copyAnswer}>کپی پاسخ</button>
-            <button className="btn primary" onClick={() => window.open("https://x.com/", "_blank", "noopener,noreferrer")}>بازکردن گفتگو در X ↗</button>
+            <button className="btn primary" onClick={() => window.open(`https://x.com/i/web/status/${reply.id}`, "_blank", "noopener,noreferrer")}>بازکردن گفتگو در X ↗</button>
             <button className={`btn sent-action ${isSent ? "done" : ""}`} disabled={isSent} onClick={() => { onMarkSent(reply.id); notify("پاسخ به‌عنوان ارسال‌شده ثبت شد"); }}>{isSent ? "✓ پاسخ ارسال شده است" : "من این پاسخ را ارسال کردم"}</button>
           </div>
         </div>
@@ -544,24 +556,23 @@ function SentView({ replyIds, postIds, replyItems, content }: { replyIds: string
       <article className="panel"><span>پاسخ ارسال‌شده</span><strong>{replyIds.length}</strong><small>با زبان اصلی کاربر</small></article>
     </div>
     <article className="panel history-panel">
-      <div className="panel-head"><div><span className="eyebrow">گزارش عملیات</span><h3>ارسال‌های تأییدشده اپراتور</h3><p>در نسخه نهایی، زمان دقیق، کاربر انجام‌دهنده و لینک X در Audit Log ثبت می‌شود.</p></div></div>
-      {records.length === 0 ? <div className="empty-state"><strong>هنوز ارسالی ثبت نشده است.</strong><p>پس از انتشار در X، دکمه «من ارسال کردم» را در صف محتوا یا صندوق پاسخ‌ها بزنید.</p></div> : <div className="history-list">{records.map((record) => <div className="history-row" key={record.id}><span className={`history-icon ${record.type === "پست" ? "post" : "reply"}`}>{record.type === "پست" ? "≡" : "↩"}</span><div><strong>{record.title}</strong><p dir="auto">{record.detail}</p><small>{record.language} · میز اپراتور · همین حالا</small></div><span className="sent-chip">✓ ثبت‌شده</span><button className="btn quiet" onClick={() => window.open("https://x.com/", "_blank", "noopener,noreferrer")}>دیدن در X ↗</button></div>)}</div>}
+      <div className="panel-head"><div><span className="eyebrow">گزارش عملیات</span><h3>ارسال‌های تأییدشده اپراتور</h3><p>این فهرست از دکمه «من ارسال کردم» ساخته می‌شود و فعلاً زمان مرورگر و متن نهایی را نگه می‌دارد؛ لینک دقیق پست فقط وقتی در X باز می‌شود قابل مشاهده است.</p></div></div>
+      {records.length === 0 ? <div className="empty-state"><strong>هنوز ارسالی ثبت نشده است.</strong><p>پس از انتشار در X، دکمه «من ارسال کردم» را در صف محتوا یا صندوق پاسخ‌ها بزنید.</p></div> : <div className="history-list">{records.map((record) => <div className="history-row" key={record.id}><span className={`history-icon ${record.type === "پست" ? "post" : "reply"}`}>{record.type === "پست" ? "≡" : "↩"}</span><div><strong>{record.title}</strong><p dir="auto">{record.detail}</p><small>{record.language} · میز اپراتور · ثبت محلی</small></div><span className="sent-chip">✓ ثبت‌شده</span><button className="btn quiet" onClick={() => window.open("https://x.com/", "_blank", "noopener,noreferrer")}>بازکردن X ↗</button></div>)}</div>}
     </article>
   </section>;
 }
 
 function TelegramView() {
   const notificationRules = [
-    ["پست یا پاسخ آماده", "فوری", true],
-    ["ارجاع امنیتی، حقوقی یا مالی", "فوری و سنجاق‌شده", true],
-    ["پاسخ بدون اقدام بیش از ۱۵ دقیقه", "یادآوری", true],
+    ["برنامه روز و پست آماده", "پس از تکمیل مدیر روزانه", true],
+    ["پاسخ تازه در صندوق", "پس از تولید پاسخ منبع‌دار", true],
     ["بودجه X در ۵۰٪، ۸۰٪ و ۱۰۰٪", "فوری", true],
-    ["توقف Poller یا خطای OAuth", "پس از ۳ خطا", true],
-    ["خطای Firecrawl یا اعتبار کم", "فقط موارد منتخب", true],
-    ["کپی‌شده ولی ثبت‌نشده", "بعد از ۱۵ دقیقه", true],
-    ["خلاصه صف، هزینه و عملکرد", "روزانه ساعت ۱۸", true],
+    ["پایان پژوهش هدفمند", "همراه لینک نتیجه", true],
+    ["پاسخ بدون اقدام بیش از ۱۵ دقیقه", "هنوز پیاده‌سازی نشده", false],
+    ["توقف Poller یا خطای OAuth", "هنوز پیاده‌سازی نشده", false],
+    ["کپی‌شده ولی ثبت‌نشده", "هنوز پیاده‌سازی نشده", false],
+    ["خلاصه روزانه عملکرد", "هنوز پیاده‌سازی نشده", false],
   ] as const;
-  const [enabled, setEnabled] = useState(notificationRules.map((rule) => rule[2]));
   const [connection, setConnection] = useState<TelegramConnection | null>(null);
   const [checking, setChecking] = useState(true);
   const [sending, setSending] = useState(false);
@@ -619,22 +630,22 @@ function TelegramView() {
       <div className="connection-state"><span className={`status-large ${isConnected ? "connected" : "waiting"}`}><i/> {checking ? "در حال بررسی" : isConnected ? "متصل و فعال" : "منتظر شناسایی گروه"}</span><div><span>نام بات</span><strong dir="ltr">{botUsername}</strong></div><div><span>گروه مقصد</span><strong>{groupTitle}</strong></div><button className="btn accent" disabled={checking || sending} onClick={() => void testTelegram()}>{sending ? "در حال ارسال…" : isConnected ? "آزمایش ارسال اعلان" : "شناسایی دوباره گروه"}</button></div>
       {!isConnected && !checking && <div className="telegram-setup"><strong>یک مرحله تا اتصال مانده</strong><p>در گروه تلگرام این دستور را ارسال کنید و سپس «شناسایی دوباره گروه» را بزنید:</p><code dir="ltr">/connect@SocialWalletTrackerBot</code></div>}
       {telegramNotice && <p className={`telegram-notice ${isConnected ? "success" : "warning"}`} role="status">{telegramNotice}</p>}
-      <div className="deep-link-note"><strong>لینک مستقیم چگونه کار می‌کند؟</strong><p>هر اعلان شناسه همان پست یا پاسخ را دارد. اپراتور با لمس لینک، مستقیم به همان مورد در داشبورد می‌رسد؛ سپس متن را کپی، در X منتشر و ارسال را ثبت می‌کند.</p></div>
+      <div className="deep-link-note"><strong>لینک اعلان چگونه کار می‌کند؟</strong><p>اعلان اپراتور را مستقیم به بخش مرتبطِ برنامه، پست، پاسخ یا پژوهش می‌برد؛ سپس متن را بررسی، در X منتشر و ارسال را در داشبورد ثبت می‌کند.</p></div>
     </article>
 
     <article className="panel telegram-feed">
       <div className="panel-head"><div><span className="eyebrow">رویدادهای واقعی</span><h3>اعلان‌های اخیر</h3></div></div>
-      <div className="telegram-messages"><div className="empty-state"><strong>هنوز اعلان واقعی ثبت نشده است.</strong><p>پس از آماده‌شدن پست، دریافت کامنت، هشدار بودجه یا پایان پژوهش، اعلان این بخش از رویداد واقعی ساخته می‌شود.</p></div></div>
+      <div className="telegram-messages"><div className="empty-state"><strong>تاریخچه اعلان‌ها در گروه تلگرام است.</strong><p>این داشبورد در حال حاضر فقط ارسال موفق را تأیید می‌کند و برای جلوگیری از نمایش داده ساختگی، پیام‌های قبلی گروه را شبیه‌سازی نمی‌کند.</p></div></div>
     </article>
 
     <article className="panel notification-rules">
       <div className="panel-head"><div><span className="eyebrow">قوانین اعلان</span><h3>چه زمانی گروه مطلع شود؟</h3><p>اعلان‌های تکراری با کلید یکتا حذف می‌شوند تا گروه شلوغ نشود.</p></div></div>
-      <div className="rule-list">{notificationRules.map((rule, index) => <div className="notification-rule" key={rule[0]}><button className={`switch ${enabled[index] ? "on" : ""}`} onClick={() => setEnabled((current) => current.map((value, currentIndex) => currentIndex === index ? !value : value))} aria-label={`فعال یا غیرفعال‌کردن ${rule[0]}`}><i/></button><div><strong>{rule[0]}</strong><small>{rule[1]}</small></div><span>{enabled[index] ? "فعال" : "خاموش"}</span></div>)}</div>
+      <div className="rule-list">{notificationRules.map((rule) => <div className="notification-rule" key={rule[0]}><span className={`switch ${rule[2] ? "on" : ""}`} aria-label={rule[2] ? "پیاده‌سازی‌شده" : "در انتظار پیاده‌سازی"}><i/></span><div><strong>{rule[0]}</strong><small>{rule[1]}</small></div><span>{rule[2] ? "فعال و واقعی" : "برنامه بعدی"}</span></div>)}</div>
     </article>
   </section>;
 }
 
-function ResearchView() {
+function ResearchView({ onGenerate }: { onGenerate: (focus?: string) => Promise<void> }) {
   const [researchItems, setResearchItems] = useState<ResearchItem[]>([]);
   const [researchReady, setResearchReady] = useState(false);
   const [researchOpen, setResearchOpen] = useState(false);
@@ -648,7 +659,7 @@ function ResearchView() {
   const [telegramNotified, setTelegramNotified] = useState(false);
   const [toast, setToast] = useState("");
   const running = runState === "running";
-  const progressLabels = ["ارسال درخواست امن به Firecrawl", "جست‌وجو و جمع‌آوری منابع زنده", "حذف نتایج تکراری و آماده‌سازی شواهد", "ارسال اعلان پایان کار به تلگرام"];
+  const progressLabels = ["ارسال درخواست امن به Firecrawl", "جست‌وجو و جمع‌آوری منابع زنده", "حذف نتایج تکراری و آماده‌سازی شواهد", "بازسازی برنامه و صف محتوا", "ارسال اعلان پایان کار به تلگرام"];
 
   useEffect(() => {
     const hydrationTimer = window.setTimeout(() => {
@@ -694,10 +705,12 @@ function ResearchView() {
       });
       const data = await response.json() as { ok?: boolean; result?: ResearchItem; telegramNotified?: boolean; error?: string };
       if (!response.ok || !data.ok || !data.result) throw new Error(data.error || "اجرای پژوهش ناموفق بود.");
-      setProgressStep(3);
       setResearchItems((current) => [data.result!, ...current.filter((item) => item.id !== data.result!.id)]);
       setCompletedResult(data.result);
       setTelegramNotified(Boolean(data.telegramNotified));
+      setProgressStep(3);
+      await onGenerate(topic.trim());
+      setProgressStep(4);
       setRunState("success");
       setToast(data.telegramNotified ? "پژوهش تکمیل شد و تلگرام مطلع شد" : "پژوهش تکمیل شد؛ اعلان تلگرام ارسال نشد");
       window.setTimeout(() => setToast(""), 4200);
@@ -743,7 +756,7 @@ function StrategyView({ onNavigate, plan }: { onNavigate: (view: View) => void; 
     ...plan.interactions.map((item) => ({ id: `interaction-${item.id}`, time: "امروز", type: "تعامل", title: item.account, detail: item.reason })),
   ];
   return <section className="strategy-view">
-    <div className="strategy-hero panel lift-card"><div><span className="eyebrow">برنامه زنده · {plan.date}</span><h2>{plan.todayGoal}</h2><p>{plan.rationale}</p></div><div className="strategy-score"><span>وضعیت داده</span><strong>زنده</strong><small>بر پایه منابع ثبت‌شده امروز</small></div></div>
+    <div className="strategy-hero panel lift-card"><div><span className="eyebrow">برنامه زنده · {plan.date}</span><h2>{plan.todayGoal}</h2><p>{plan.strategy}</p></div><div className="strategy-score"><span>وضعیت داده</span><strong>زنده</strong><small>بر پایه منابع ثبت‌شده امروز</small></div></div>
     <div className="strategy-kpis">
       <article className="panel lift-card"><span>پست آماده</span><strong>{plan.posts.length.toLocaleString("fa-IR")}</strong><small>دارای متن و منبع</small></article>
       <article className="panel lift-card"><span>تعامل هدفمند</span><strong>{plan.interactions.length.toLocaleString("fa-IR")}</strong><small>دارای لینک واقعی X</small></article>
@@ -753,20 +766,22 @@ function StrategyView({ onNavigate, plan }: { onNavigate: (view: View) => void; 
     <article className="panel strategy-calendar"><div className="panel-head"><div><span className="eyebrow">تقویم اجرایی امروز</span><h3>موارد تولیدشده توسط مدیر هوشمند</h3><p>فقط زمان‌ها و اقدام‌هایی نمایش داده می‌شوند که در برنامه واقعی امروز وجود دارند.</p></div></div>
       {scheduledItems.length ? <div className="calendar-grid">{scheduledItems.map((item) => <div className="calendar-day lift-card" key={item.id}><header><strong>{item.type}</strong><small>{item.time}</small></header><div className="calendar-slot"><b>{item.title}</b><p>{item.detail}</p></div></div>)}</div> : <div className="empty-state"><strong>برای امروز اسلاتی ثبت نشده است.</strong><p>این توقف بخشی از خروجی واقعی برنامه امروز است.</p></div>}
     </article>
-    <div className="logic-grid"><article className="panel lift-card"><span className="eyebrow">منطق تصمیم امروز</span><h3>چرا این برنامه ساخته شد؟</h3><p>{plan.rationale}</p></article><article className="panel lift-card action-panel"><span className="eyebrow">قدم بعد اپراتور</span><h3>کارهای واقعی امروز را اجرا کن</h3><p>هر ردیف زمان، متن و مقصد دقیق دارد.</p><button className="btn accent" onClick={() => onNavigate("tasks")}>شروع کارهای امروز ←</button></article></div>
+    <div className="logic-grid"><article className="panel lift-card"><span className="eyebrow">منطق تصمیم امروز</span><h3>چرا این برنامه ساخته شد؟</h3><p>{plan.strategy}</p></article><article className="panel lift-card action-panel"><span className="eyebrow">قدم بعد اپراتور</span><h3>کارهای واقعی امروز را اجرا کن</h3><p>هر ردیف زمان، متن و مقصد دقیق دارد.</p><button className="btn accent" onClick={() => onNavigate("tasks")}>شروع کارهای امروز ←</button></article></div>
   </section>;
 }
 
 
 function TasksView({ onNavigate, plan }: { onNavigate: (view: View) => void; plan: DailyManagerPlan | null }) {
   const [done, setDone] = useState<string[]>([]);
+  const taskStorageKey = plan ? `wallet-social-daily-tasks-${plan.date}-${plan.contextRevision.slice(0, 12)}` : "";
   useEffect(() => {
     const hydrationTimer = window.setTimeout(() => {
-      try { setDone(JSON.parse(localStorage.getItem('wallet-social-daily-tasks-live-v2') || '[]')); } catch { setDone([]); }
+      if (!taskStorageKey) { setDone([]); return; }
+      try { setDone(JSON.parse(localStorage.getItem(taskStorageKey) || '[]')); } catch { setDone([]); }
     }, 0);
     return () => window.clearTimeout(hydrationTimer);
-  }, []);
-  useEffect(() => { localStorage.setItem('wallet-social-daily-tasks-live-v2', JSON.stringify(done)); }, [done]);
+  }, [taskStorageKey]);
+  useEffect(() => { if (taskStorageKey) localStorage.setItem(taskStorageKey, JSON.stringify(done)); }, [done, taskStorageKey]);
   const tasks = plan?.tasks.map((task) => ({ id: task.id, time: task.time, title: task.title, detail: task.instruction, target: task.kind === "publish" ? "content" as View : task.kind === "reply" ? "replies" as View : task.kind === "interact" ? "growth" as View : task.kind === "research" ? "research" as View : "sent" as View, priority: task.priority === "now" ? "الان" : task.priority === "today" ? "امروز" : "اختیاری" })) || [];
   const percent = tasks.length ? Math.round((done.filter((id) => tasks.some((task) => task.id === id)).length / tasks.length) * 100) : 0;
   return <section className="tasks-view">
@@ -777,13 +792,13 @@ function TasksView({ onNavigate, plan }: { onNavigate: (view: View) => void; pla
 }
 
 
-function CreativeView({ onNavigate, plan }: { onNavigate: (view: View) => void; plan: DailyManagerPlan | null }) {
+function CreativeView({ onNavigate, plan, onGenerate }: { onNavigate: (view: View) => void; plan: DailyManagerPlan | null; onGenerate: (focus?: string) => Promise<void> }) {
   const [open, setOpen] = useState(false);
   const [topic, setTopic] = useState("");
   const [language, setLanguage] = useState("انگلیسی");
   const [state, setState] = useState<"idle"|"running"|"success"|"error">("idle");
   const [message, setMessage] = useState("");
-  const run = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); setState("running"); setMessage(""); try { const response = await fetch("/api/research", { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({ topic, scope:"منابع رسمی پروژه، مستندات بلاکچین و منابع خبری معتبر" }) }); const data = await response.json() as {ok?:boolean; result?:ResearchItem; error?:string}; if (!response.ok || !data.ok || !data.result) throw new Error(data.error || "ساخت بسته ناموفق بود."); localStorage.setItem("wallet-social-last-creative-brief-live-v2", JSON.stringify({ topic, language, source:data.result, createdAt:new Date().toISOString() })); setState("success"); setMessage("منابع واقعی بررسی شدند. خروجی در پژوهش زنده ثبت شد و مدیر هوشمند در اجرای بعدی از آن استفاده می‌کند."); } catch (error) { setState("error"); setMessage(error instanceof Error ? error.message : "ساخت بسته ناموفق بود."); } };
+  const run = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); setState("running"); setMessage(""); try { const response = await fetch("/api/research", { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({ topic, scope:"منابع رسمی پروژه، مستندات بلاکچین و منابع خبری معتبر" }) }); const data = await response.json() as {ok?:boolean; result?:ResearchItem; error?:string}; if (!response.ok || !data.ok || !data.result) throw new Error(data.error || "ساخت بسته ناموفق بود."); await onGenerate(`${topic.trim()} · زبان خروجی ترجیحی: ${language}`); localStorage.setItem("wallet-social-last-creative-brief-live-v2", JSON.stringify({ topic, language, source:data.result, createdAt:new Date().toISOString() })); setState("success"); setMessage("منابع بررسی و برنامه مدیر هوشمند با همین موضوع بازسازی شد؛ خروجی جدید در صف محتواست."); } catch (error) { setState("error"); setMessage(error instanceof Error ? error.message : "ساخت بسته ناموفق بود."); } };
   const posts = plan?.posts || [];
   return <section className="creative-view">
     <div className="creative-hero panel lift-card"><div><span className="eyebrow">بسته کامل انتشار</span><h2>محتوا فقط از داده و منبع واقعی ساخته می‌شود.</h2><p>هیچ نمونه آماده‌ای نمایش داده نمی‌شود؛ متن، ترجمه و تصویر پس از تحلیل منابع زنده ظاهر می‌شوند.</p><button className="btn accent" onClick={() => { setState("idle"); setOpen(true); }}>پژوهش برای محتوای جدید ✦</button></div><div className="creative-pipeline">{["سیگنال زنده","راستی‌آزمایی","متن و ترجمه","تصویر اختصاصی","تأیید انسانی"].map((step,index) => <div key={step}><span>{(index+1).toLocaleString("fa-IR")}</span><b>{step}</b></div>)}</div></div>
@@ -798,39 +813,45 @@ function GrowthView({ plan }: { plan: DailyManagerPlan | null }) {
   const copy = (id:string, value:string) => { void navigator.clipboard.writeText(value); setCopied(id); window.setTimeout(() => setCopied(''), 1800); };
   const opportunities = plan?.interactions.map((item) => ({ id: item.id, topic: item.account, query: item.postUrl, reason: item.reason, comment: item.comment, directUrl: item.postUrl })) || [];
   return <section className="growth-view">
-    <div className="growth-hero panel"><div><span className="eyebrow">رشد باکیفیت، نه اسپم</span><h2>سه تعامل معنی‌دار بهتر از سی کامنت تکراری است.</h2><p>عامل موضوع و متن را پیشنهاد می‌دهد؛ اپراتور پست واقعی را می‌بیند و فقط پس از اطمینان منتشر می‌کند.</p></div><div className="api-gate"><i>✓</i><div><strong>اعتبار X برای رشد مصرف نمی‌شود</strong><small>برای حفظ ۵ دلار Owned Reads، پیدا کردن پست هدف با لینک جست‌وجوی دستی انجام می‌شود.</small></div></div></div>
+    <div className="growth-hero panel"><div><span className="eyebrow">رشد باکیفیت، نه اسپم</span><h2>سه تعامل معنی‌دار بهتر از سی کامنت تکراری است.</h2><p>عامل موضوع و متن را پیشنهاد می‌دهد؛ اپراتور پست واقعی را می‌بیند و فقط پس از اطمینان منتشر می‌کند.</p></div><div className="api-gate"><i>✓</i><div><strong>اعتبار X برای رشد مصرف نمی‌شود</strong><small>Firecrawl پست عمومی هدف را پیدا می‌کند؛ X API فقط برای کامنت‌های اکانت خودمان رزرو است.</small></div></div></div>
     <div className="growth-layout"><div className="opportunity-list">{opportunities.map((item) => <article className="panel opportunity-card lift-card" key={item.id}><header><div><span className="eyebrow">فرصت زنده امروز</span><h3>{item.topic}</h3></div><span className="match-score">LIVE</span></header><div className="target-query"><small>لینک پست واقعی در X</small><code dir="ltr">{item.query}</code></div><p>{item.reason}</p><blockquote dir="ltr">{item.comment}</blockquote><footer><a className="btn quiet" href={item.directUrl} target="_blank" rel="noreferrer">بازکردن پست در X ↗</a><button className="btn accent" onClick={() => copy(item.id,item.comment)}>{copied === item.id ? '✓ کپی شد' : 'کپی کامنت پیشنهادی'}</button></footer></article>)}{opportunities.length === 0 && <article className="panel empty-state"><strong>فرصت تعامل واقعی پیدا نشده است.</strong><p>تا زمانی که مدیر هوشمند یک پست واقعی و مرتبط در X پیدا نکند، پیشنهادی نمایش داده نمی‌شود.</p></article>}</div>
-      <aside className="growth-side"><article className="panel guard-card"><span className="eyebrow">گارد ضداسپم</span><h3>قبل از هر تعامل</h3><ul><li><b>ارتباط:</b> پست باید واقعاً درباره موضوع محصول باشد.</li><li><b>اصالت:</b> شباهت با کامنت‌های قبلی کمتر از ۷۲٪.</li><li><b>تعداد:</b> حداکثر ۳ تا ۵ تعامل دستی باکیفیت در روز.</li><li><b>توقف:</b> پاسخ تکراری، لایک خودکار و فالو انبوه ممنوع.</li></ul></article><article className="panel target-accounts"><span className="eyebrow">سبد اکانت هدف</span><h3>چه کسانی ارزش رصد دارند؟</h3>{[['پژوهشگران امنیت وب۳','اعتماد و آموزش'],['تحلیل‌گران داده آن‌چین','اثبات کاربرد'],['اکوسیستم‌های Solana و EVM','کشف مخاطب'],['سازندگان ابزار معامله‌گری','همکاری محصول']].map((item) => <div key={item[0]}><span>◎</span><p><strong>{item[0]}</strong><small>{item[1]}</small></p><b>روزانه</b></div>)}</article></aside></div>
+      <aside className="growth-side"><article className="panel guard-card"><span className="eyebrow">گارد ضداسپم</span><h3>قبل از هر تعامل</h3><ul><li><b>ارتباط:</b> پست باید واقعاً درباره موضوع محصول باشد.</li><li><b>اصالت:</b> کامنت عمومی، تکراری یا صرفاً تبلیغاتی رد می‌شود.</li><li><b>تعداد:</b> حداکثر ۴ تعامل دستی باکیفیت در روز.</li><li><b>توقف:</b> پاسخ تکراری، لایک خودکار و فالو انبوه ممنوع.</li></ul></article><article className="panel target-accounts"><span className="eyebrow">اکانت‌های واقعی امروز</span><h3>چه کسانی ارزش تعامل دارند؟</h3>{(plan?.interactions || []).map((item) => <div key={item.id}><span>◎</span><p><strong>{item.account}</strong><small>{item.reason}</small></p><b>{item.time}</b></div>)}{!plan?.interactions.length && <div className="empty-state compact"><strong>هدف تأییدشده‌ای نیست.</strong><p>هیچ اکانت نمونه‌ای نمایش داده نمی‌شود.</p></div>}</article></aside></div>
   </section>;
 }
 
 
 function BudgetView() {
+  const [usage, setUsage] = useState<{ resourceReads: number; budgetUsed: number; updatedAt: string } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const loadUsage = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await fetch("/api/x/inbox", { cache: "no-store" });
+      const payload = await response.json() as { ok?: boolean; resourceReads?: number; budgetUsed?: number; updatedAt?: string };
+      if (response.ok && payload.ok) setUsage({ resourceReads: payload.resourceReads || 0, budgetUsed: payload.budgetUsed || 0, updatedAt: payload.updatedAt || "" });
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  useEffect(() => { const timer = window.setTimeout(() => void loadUsage(), 0); return () => window.clearTimeout(timer); }, [loadUsage]);
+  const budgetUsed = Math.min(5, usage?.budgetUsed || 0);
+  const budgetPercent = Math.min(100, (budgetUsed / 5) * 100);
+  const remaining = Math.max(0, 4.99 - budgetUsed);
   return (
     <section>
-      <div className="budget-hero panel"><div><span className="eyebrow">محافظ هزینه فعال</span><h2>۵ دلار فقط برای خواندن کامنت‌های جدید</h2><p>هیچ جست‌وجو، انتشار پست، تولید محتوا یا درخواست Firecrawl از اعتبار X استفاده نمی‌کند.</p></div><div className="budget-bar-large reserved"><span style={{width:"0%"}}/><i className="mark half">هشدار ۲٫۵۰ دلار</i><i className="mark high">هشدار ۴ دلار</i></div></div>
+      <div className="budget-hero panel"><div><span className="eyebrow">محافظ هزینه فعال</span><h2>۵ دلار فقط برای خواندن کامنت‌های جدید</h2><p>هیچ جست‌وجو، انتشار پست، تولید محتوا یا درخواست Firecrawl از اعتبار X استفاده نمی‌کند.</p><button className="btn quiet" onClick={() => void loadUsage()} disabled={loading}>{loading ? "در حال دریافت…" : "دریافت مصرف واقعی داشبورد ↻"}</button></div><div className="budget-bar-large reserved"><span style={{width:`${budgetPercent}%`}}/><i className="mark half">هشدار ۲٫۵۰ دلار</i><i className="mark high">هشدار ۴ دلار</i></div></div>
       <div className="usage-grid">
-        <article className="panel usage-card"><span className="eyebrow">اعتبار خریداری‌شده</span><strong>۵٫۰۰ دلار</strong><p>سقف سخت همین مقدار است</p><small>Auto Recharge باید خاموش بماند</small></article>
+        <article className="panel usage-card"><span className="eyebrow">مصرف ثبت‌شده داشبورد</span><strong>{budgetUsed.toFixed(3)} دلار</strong><p>{(usage?.resourceReads || 0).toLocaleString("fa-IR")} منشن جدید پردازش‌شده</p><small>{usage?.updatedAt ? `آخرین ثبت: ${new Date(usage.updatedAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" })}` : "هنوز منشن جدیدی ثبت نشده است"}</small></article>
         <article className="panel usage-card"><span className="eyebrow">هزینه Owned Read</span><strong>۰٫۰۰۱ دلار</strong><p>برای هر منشن جدید برگشتی</p><small>هزینه بر اساس منبع جدید است، نه تعداد Poll</small></article>
-        <article className="panel usage-card"><span className="eyebrow">ظرفیت نظری</span><strong>تا ۵٬۰۰۰</strong><p>منشن جدید با ۵ دلار</p><small>مصرف دقیق و زنده در X Console نمایش داده می‌شود</small></article>
+        <article className="panel usage-card"><span className="eyebrow">مانده تا توقف ایمن</span><strong>{remaining.toFixed(3)} دلار</strong><p>حدود {Math.floor(remaining / 0.001).toLocaleString("fa-IR")} منشن جدید دیگر</p><small>صورتحساب نهایی و رسمی فقط در X Console است</small></article>
       </div>
       <article className="panel budget-explanation"><strong>این صفحه را چطور بخوانم؟</strong><ol><li>سامانه هر ۲ دقیقه فقط مسیر منشن‌های اکانت خودمان را بررسی می‌کند.</li><li>اگر کامنت جدیدی نباشد، منبع تازه‌ای برای محاسبه هزینه دریافت نمی‌شود.</li><li>شناسه آخرین منشن ذخیره می‌شود تا موارد قدیمی عمداً دوباره درخواست نشوند.</li><li>در ۲٫۵۰ دلار و ۴ دلار به تلگرام هشدار ارسال می‌شود؛ در ۵ دلار پایش متوقف می‌شود.</li></ol></article>
-      <article className="panel alert-policy"><div className="panel-head"><div><span className="eyebrow">محافظ‌های خودکار</span><h3>هشدارهای اعتبار</h3></div><span className="live-pill"><i/> فعال</span></div><div className="policy-row"><span className="policy-level warning">۵۰٪</span><div><strong>هشدار اولیه در ۲٫۵۰ دلار</strong><small>اعلان تلگرام؛ پایش ادامه دارد</small></div><b>فعال</b></div><div className="policy-row"><span className="policy-level critical">۸۰٪</span><div><strong>هشدار مهم در ۴ دلار</strong><small>اعلان فوری به مدیر</small></div><b>فعال</b></div><div className="policy-row"><span className="policy-level stop">۱۰۰٪</span><div><strong>توقف قطعی در ۵ دلار</strong><small>فقط Polling منشن‌ها متوقف می‌شود؛ داشبورد باز می‌ماند.</small></div><b>محافظت‌شده</b></div></article>
+      <article className="panel alert-policy"><div className="panel-head"><div><span className="eyebrow">محافظ‌های خودکار</span><h3>هشدارهای اعتبار</h3></div><span className="live-pill"><i/> فعال</span></div><div className="policy-row"><span className="policy-level warning">۵۰٪</span><div><strong>هشدار اولیه در ۲٫۵۰ دلار</strong><small>اعلان تلگرام؛ پایش ادامه دارد</small></div><b>فعال</b></div><div className="policy-row"><span className="policy-level critical">۸۰٪</span><div><strong>هشدار مهم در ۴ دلار</strong><small>اعلان فوری به مدیر</small></div><b>فعال</b></div><div className="policy-row"><span className="policy-level stop">ایمن</span><div><strong>توقف در ۴٫۹۹ دلار</strong><small>یک سنت حاشیه امن برای آخرین batch؛ فقط Polling متوقف می‌شود.</small></div><b>محافظت‌شده</b></div></article>
     </section>
   );
 }
 
 function SettingsView() {
-  const [settings, setSettings] = useState(() => {
-    if (typeof window === "undefined") return SETTINGS_DEFAULTS;
-    try {
-      const stored = JSON.parse(window.localStorage.getItem("wallet-social-settings") || "null");
-      return stored && typeof stored === "object" ? { ...SETTINGS_DEFAULTS, ...stored } : SETTINGS_DEFAULTS;
-    } catch {
-      return SETTINGS_DEFAULTS;
-    }
-  });
-  const [saved, setSaved] = useState(false);
   const [xConnection, setXConnection] = useState<XConnection | null>(null);
   const [xChecking, setXChecking] = useState(true);
   const checkXConnection = useCallback(async () => {
@@ -849,18 +870,12 @@ function SettingsView() {
     const timer = window.setTimeout(() => { void checkXConnection(); }, 0);
     return () => window.clearTimeout(timer);
   }, [checkXConnection]);
-  const saveSettings = () => {
-    window.localStorage.setItem("wallet-social-settings", JSON.stringify(settings));
-    setSaved(true);
-    window.setTimeout(() => setSaved(false), 2400);
-  };
   return <section>
     <div className="settings-grid">
-      <article className="panel settings-card"><div className="panel-head"><div><span className="eyebrow">اتصال به X</span><h3>فقط پایش کامنت‌های خودمان</h3></div><button className={`switch ${settings.polling ? "on" : ""}`} onClick={() => setSettings({ ...settings, polling: !settings.polling })} aria-label="فعال یا غیرفعال‌کردن پایش" aria-pressed={settings.polling}><i/></button></div><div className="x-account-card"><span className="avatar">WT</span><div><small>اکانت رسمی پروژه</small><strong dir="ltr">{X_ACCOUNT_HANDLE}</strong></div><a href={X_ACCOUNT_URL} target="_blank" rel="noreferrer">مشاهده در X ↗</a></div><div className={`x-connection-status ${xConnection?.connected ? "connected" : xConnection?.needsCredit ? "credit" : "error"}`}><span><i />{xChecking ? "در حال بررسی تنظیمات امن…" : xConnection?.connected ? "کلیدها ثبت شده‌اند و فقط مسیر منشن‌ها مجاز است" : xConnection?.needsCredit ? "اعتبار X API نیاز به شارژ دارد" : xConnection?.error || "تنظیمات X هنوز کامل نشده است"}</span><button type="button" onClick={() => void checkXConnection()} disabled={xChecking}>{xChecking ? "بررسی…" : "بررسی تنظیمات"}</button></div><label>فاصله زمانی پایش<select value={settings.interval} onChange={(event) => setSettings({ ...settings, interval: event.target.value })}><option value="120">هر ۲ دقیقه</option><option value="300">هر ۵ دقیقه</option></select></label><label>سقف قطعی Owned Reads<div className="input-prefix"><span>$</span><input value="5.00" readOnly aria-label="سقف ثابت پنج دلار"/></div></label><div className="settings-note">این سقف قفل است. فقط مسیر <code>GET /2/users/:id/mentions</code> مجاز است و شناسه آخرین منشن برای جلوگیری از خواندن عمدی موارد قدیمی ذخیره می‌شود.</div></article>
-      <article className="panel settings-card"><div className="panel-head"><div><span className="eyebrow">قوانین کانتکست</span><h3>غنی‌سازی با Firecrawl</h3></div><button className={`switch ${settings.firecrawl ? "on" : ""}`} onClick={() => setSettings({ ...settings, firecrawl: !settings.firecrawl })} aria-label="فعال یا غیرفعال‌کردن Firecrawl" aria-pressed={settings.firecrawl}><i/></button></div><label className="check-row"><input type="checkbox" checked={settings.lowConfidence} onChange={(event) => setSettings({ ...settings, lowConfidence: event.target.checked })}/><span><strong>پاسخ‌های کم‌اطمینان</strong><small>اطمینان کمتر از ۸۲٪</small></span></label><label className="check-row"><input type="checkbox" checked={settings.externalClaims} onChange={(event) => setSettings({ ...settings, externalClaims: event.target.checked })}/><span><strong>لینک‌ها و ادعاهای خارجی</strong><small>بررسی آدرس‌ها و اطلاعات عمومی روز</small></span></label><label className="check-row"><input type="checkbox" checked={settings.importantAccounts} onChange={(event) => setSettings({ ...settings, importantAccounts: event.target.checked })}/><span><strong>حساب‌های عمومی مهم</strong><small>افزودن پروفایل عمومی و سابقه گفتگو</small></span></label></article>
+      <article className="panel settings-card"><div className="panel-head"><div><span className="eyebrow">اتصال به X</span><h3>فقط پایش کامنت‌های خودمان</h3></div><span className="live-pill"><i/> قفل و فعال</span></div><div className="x-account-card"><span className="avatar">WT</span><div><small>اکانت رسمی پروژه</small><strong dir="ltr">{X_ACCOUNT_HANDLE}</strong></div><a href={X_ACCOUNT_URL} target="_blank" rel="noreferrer">مشاهده در X ↗</a></div><div className={`x-connection-status ${xConnection?.connected ? "connected" : xConnection?.needsCredit ? "credit" : "error"}`}><span><i />{xChecking ? "در حال بررسی تنظیمات امن…" : xConnection?.connected ? "کلیدها ثبت شده‌اند و فقط مسیر منشن‌ها مجاز است" : xConnection?.needsCredit ? "اعتبار X API نیاز به شارژ دارد" : xConnection?.error || "تنظیمات X هنوز کامل نشده است"}</span><button type="button" onClick={() => void checkXConnection()} disabled={xChecking}>{xChecking ? "بررسی…" : "بررسی تنظیمات"}</button></div><label>فاصله زمانی پایش<input value="هر ۲ دقیقه" readOnly aria-label="فاصله ثابت پایش"/></label><label>سقف قطعی Owned Reads<div className="input-prefix"><span>$</span><input value="5.00" readOnly aria-label="سقف ثابت پنج دلار"/></div></label><div className="settings-note">این سیاست‌ها عمداً قفل هستند. فقط مسیر <code>GET /2/users/:id/mentions</code> مجاز است و شناسه آخرین منشن برای جلوگیری از خواندن عمدی موارد قدیمی ذخیره می‌شود.</div></article>
+      <article className="panel settings-card"><div className="panel-head"><div><span className="eyebrow">قوانین اجباری کانتکست</span><h3>دانش پروژه + Firecrawl</h3></div><span className="live-pill"><i/> فعال</span></div><label className="check-row"><input type="checkbox" checked readOnly/><span><strong>ارجاع پاسخ‌های کم‌اطمینان</strong><small>اطمینان کمتر از ۸۲٪ هرگز سبز نمی‌شود</small></span></label><label className="check-row"><input type="checkbox" checked readOnly/><span><strong>بررسی لینک‌ها و ادعاهای خارجی</strong><small>کانتکست عمومی روز با Firecrawl؛ حقیقت محصول از فایل پروژه</small></span></label><label className="check-row"><input type="checkbox" checked readOnly/><span><strong>ممنوعیت ادعای بدون منبع</strong><small>شبکه، قابلیت، عدد، همکاری و زمان عرضه باید سند داشته باشد</small></span></label><div className="settings-note">این گزینه‌ها نمایشی یا قابل خاموش‌کردن نیستند؛ مستقیماً در منطق تولید پاسخ و برنامه روز اعمال می‌شوند.</div></article>
     </div>
-    <div className="settings-savebar"><div><strong>تغییرات تنظیمات</strong><span>پس از بررسی مقادیر، تنظیمات را برای این میز اپراتور ذخیره کنید.</span></div><button className={`btn accent ${saved ? "done" : ""}`} type="button" onClick={saveSettings}>{saved ? "✓ تنظیمات ذخیره شد" : "ذخیره تنظیمات"}</button></div>
-    {saved && <div className="toast">✓ تنظیمات با موفقیت ذخیره شد</div>}
+    <div className="settings-savebar"><div><strong>سیاست عملیاتی امن</strong><span>تغییر این محدودیت‌ها نیازمند تغییر و بازبینی کد است؛ اپراتور نمی‌تواند تصادفی آن‌ها را خاموش کند.</span></div><span className="sent-chip">✓ اعمال‌شده در موتور</span></div>
   </section>;
 }
 
@@ -871,12 +886,15 @@ export default function DashboardClient() {
   const [mobileNav, setMobileNav] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshNotice, setRefreshNotice] = useState("");
+  const [lastRefreshAt, setLastRefreshAt] = useState("");
   const [transitionPhase, setTransitionPhase] = useState<"idle" | "leaving" | "loading">("idle");
   const transitionTimers = useRef<number[]>([]);
-  const sentReplies = useStoredIds("wallet-social-sent-replies");
-  const sentPosts = useStoredIds("wallet-social-sent-posts");
-  const managedReplies = useStoredCollection<ReplyItem>("wallet-social-reply-items-live-v2", replies);
-  const managedContent = useStoredCollection<ContentItem>("wallet-social-content-items-live-v2", contentItems);
+  const sentReplies = useStoredIds("wallet-social-sent-replies-live-v3");
+  const sentPosts = useStoredIds("wallet-social-sent-posts-live-v3");
+  const managedReplies = useStoredCollection<ReplyItem>("wallet-social-reply-items-live-v3", replies);
+  const managedContent = useStoredCollection<ContentItem>("wallet-social-content-items-live-v3", contentItems);
   const dailyManager = useDailyManagerPlan();
   const setManagedContent = managedContent.setItems;
   const setManagedReplies = managedReplies.setItems;
@@ -891,33 +909,33 @@ export default function DashboardClient() {
     ].forEach((key) => window.localStorage.removeItem(key));
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    const syncInbox = async () => {
-      try {
-        const response = await fetch("/api/x/inbox", { cache: "no-store" });
-        const payload = await response.json() as { ok?: boolean; replies?: ReplyItem[] };
-        if (!cancelled && response.ok && payload.ok && payload.replies?.length) {
-          setManagedReplies((current) => {
-            const liveIds = new Set(payload.replies!.map((item) => item.id));
-            return [...payload.replies!, ...current.filter((item) => !liveIds.has(item.id))];
-          });
-        }
-      } catch {
-        // The existing inbox remains usable while the next free sync retries.
-      }
-    };
-    void syncInbox();
-    const timer = window.setInterval(() => void syncInbox(), 120_000);
-    return () => { cancelled = true; window.clearInterval(timer); };
+  const syncInbox = useCallback(async () => {
+    const response = await fetch("/api/x/inbox", { cache: "no-store" });
+    const payload = await response.json() as { ok?: boolean; replies?: ReplyItem[]; error?: string };
+    if (!response.ok || !payload.ok) throw new Error(payload.error || "صندوق پاسخ‌ها دریافت نشد.");
+    setManagedReplies((current) => (payload.replies || []).map((item) => {
+      const locallyEdited = current.find((candidate) => candidate.id === item.id);
+      return locallyEdited ? { ...item, answer: locallyEdited.answer, answerTranslation: locallyEdited.answerTranslation } : item;
+    }));
+    return payload.replies?.length || 0;
   }, [setManagedReplies]);
 
   useEffect(() => {
+    let cancelled = false;
+    const safeSyncInbox = async () => {
+      try { if (!cancelled) await syncInbox(); } catch { /* The next free sync retries. */ }
+    };
+    void safeSyncInbox();
+    const timer = window.setInterval(() => void safeSyncInbox(), 120_000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [syncInbox]);
+
+  useEffect(() => {
     if (!dailyManager.plan) return;
-    const generatedItems: ContentItem[] = dailyManager.plan.posts.map((post) => ({ id: `live-${dailyManager.plan!.date}-${post.id}`, type: "پیشنهاد زنده مدیر هوشمند", title: post.title, body: post.summaryFa, language: post.language, risk: post.risk, time: `امروز · ${post.time}`, source: `${post.sourceUrls.length.toLocaleString("fa-IR")} منبع زنده Firecrawl`, postText: post.copy, imageUrl: post.imageUrl, imageError: dailyManager.imageErrors[post.id], sourceUrls: post.sourceUrls }));
+    const generatedItems: ContentItem[] = dailyManager.plan.posts.map((post) => ({ id: `live-${dailyManager.plan!.date}-${post.id}`, type: "پیشنهاد زنده مدیر هوشمند", title: post.title, body: post.summaryFa, language: post.language, risk: post.risk, time: `امروز · ${post.time}`, source: `${post.sourceUrls.length.toLocaleString("fa-IR")} منبع تأییدشده · دانش پروژه یا Firecrawl`, postText: post.copy, imageUrl: post.imageUrl, imageError: dailyManager.imageErrors[post.id], sourceUrls: post.sourceUrls }));
     setManagedContent((current) => {
       const generatedIds = new Set(generatedItems.map((item) => item.id));
-      const previous = current.filter((item) => !item.id.startsWith("live-") && !generatedIds.has(item.id));
+      const previous = current.filter((item) => item.id.startsWith("p-") && !generatedIds.has(item.id));
       return [...generatedItems, ...previous];
     });
   }, [dailyManager.imageErrors, dailyManager.plan, setManagedContent]);
@@ -986,13 +1004,31 @@ export default function DashboardClient() {
       window.setTimeout(() => setTransitionPhase("idle"), 620),
     ];
   };
-  const refreshView = () => {
+  const refreshView = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    setRefreshNotice("");
     transitionTimers.current.forEach((item) => window.clearTimeout(item));
     setTransitionPhase("leaving");
-    transitionTimers.current = [
-      window.setTimeout(() => setTransitionPhase("loading"), 170),
-      window.setTimeout(() => setTransitionPhase("idle"), 670),
-    ];
+    const loadingTimer = window.setTimeout(() => setTransitionPhase("loading"), 170);
+    transitionTimers.current = [loadingTimer];
+    try {
+      const [, replyCount] = await Promise.all([
+        dailyManager.reload(),
+        syncInbox(),
+        new Promise((resolve) => window.setTimeout(resolve, 520)),
+      ]);
+      setSeconds(119);
+      setLastRefreshAt(new Date().toLocaleTimeString("fa-IR", { timeZone: "Asia/Tehran", hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+      setRefreshNotice(`داده‌های زنده تازه شد · ${Number(replyCount).toLocaleString("fa-IR")} پاسخ در صندوق`);
+    } catch (reason) {
+      setRefreshNotice(reason instanceof Error ? reason.message : "تازه‌سازی داده‌ها ناموفق بود.");
+    } finally {
+      window.clearTimeout(loadingTimer);
+      setTransitionPhase("idle");
+      setRefreshing(false);
+      window.setTimeout(() => setRefreshNotice(""), 6000);
+    }
   };
   const time = `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
   const logout = async () => {
@@ -1021,24 +1057,25 @@ export default function DashboardClient() {
       {mobileNav && <button className="nav-overlay" onClick={() => setMobileNav(false)} aria-label="بستن منو"/>}
 
       <main className="main">
-        <header className="topbar"><div className="topbar-left"><button className="menu-button" onClick={() => setMobileNav(true)} aria-label="بازکردن منو">☰</button><div className="view-heading" key={view}><div className="title-line"><h1>{viewMeta[view].title}</h1><span className="system-pill"><i/> آماده کار</span></div><p>{viewMeta[view].sub}</p></div></div><div className="topbar-actions"><button className={`btn quiet refresh-button ${transitionPhase !== "idle" ? "spinning" : ""}`} onClick={refreshView}><span aria-hidden="true">↻</span> تازه‌سازی</button><button className="logout-button" onClick={() => void logout()} disabled={loggingOut} aria-label="خروج از داشبورد"><span aria-hidden="true">↪</span><b>{loggingOut ? "در حال خروج" : "خروج"}</b></button></div></header>
+        <header className="topbar"><div className="topbar-left"><button className="menu-button" onClick={() => setMobileNav(true)} aria-label="بازکردن منو">☰</button><div className="view-heading" key={view}><div className="title-line"><h1>{viewMeta[view].title}</h1><span className="system-pill"><i/> آماده کار</span></div><p>{viewMeta[view].sub}</p></div></div><div className="topbar-actions">{lastRefreshAt && <small className="refresh-meta" role="status">آخرین تازه‌سازی {lastRefreshAt}</small>}<button className={`btn quiet refresh-button ${refreshing ? "spinning" : ""}`} onClick={() => void refreshView()} disabled={refreshing}><span aria-hidden="true">↻</span> {refreshing ? "در حال دریافت…" : "تازه‌سازی"}</button><button className="logout-button" onClick={() => void logout()} disabled={loggingOut} aria-label="خروج از داشبورد"><span aria-hidden="true">↪</span><b>{loggingOut ? "در حال خروج" : "خروج"}</b></button></div></header>
         <div className={`content content-stage ${transitionPhase === "leaving" ? "is-leaving" : ""}`} aria-busy={isLoading || transitionPhase !== "idle"}>
           {(isLoading || transitionPhase === "loading") ? <ViewSkeleton /> : <div className="view-enter" key={view}>
             {view === "overview" && <Overview onNavigate={changeView} manager={dailyManager}/>}
             {view === "strategy" && <StrategyView onNavigate={changeView} plan={dailyManager.plan}/>}
             {view === "tasks" && <TasksView onNavigate={changeView} plan={dailyManager.plan}/>}
-            {view === "creative" && <CreativeView onNavigate={changeView} plan={dailyManager.plan}/>}
+            {view === "creative" && <CreativeView onNavigate={changeView} plan={dailyManager.plan} onGenerate={dailyManager.regenerate}/>}
             {view === "growth" && <GrowthView plan={dailyManager.plan}/>}
             {view === "replies" && <RepliesView replyItems={managedReplies.items} onRepliesChange={managedReplies.setItems} sentIds={sentReplies.ids} onMarkSent={sentReplies.mark}/>}
             {view === "content" && <ContentView content={managedContent.items} onContentChange={managedContent.setItems} sentIds={sentPosts.ids} onMarkSent={sentPosts.mark} onRetryImages={() => void dailyManager.retryImages()}/>}
             {view === "sent" && <SentView replyIds={sentReplies.ids} postIds={sentPosts.ids} replyItems={managedReplies.items} content={managedContent.items}/>}
             {view === "telegram" && <TelegramView/>}
-            {view === "research" && <ResearchView/>}
+            {view === "research" && <ResearchView onGenerate={dailyManager.regenerate}/>}
             {view === "budget" && <BudgetView/>}
             {view === "settings" && <SettingsView/>}
           </div>}
         </div>
       </main>
+      {refreshNotice && <div className="toast" role="status" aria-live="polite">{refreshNotice}</div>}
       <nav className="mobile-bottom-nav" aria-label="دسترسی سریع موبایل">
         {[{ id: "overview" as View, icon: "⌂", label: "امروز" }, { id: "content" as View, icon: "۱", label: "پست" }, { id: "replies" as View, icon: "۲", label: "پاسخ" }, { id: "tasks" as View, icon: "✓", label: "کارها" }].map((item) => <button key={item.id} className={`${targetView === item.id ? "active" : ""} ${transitionPhase !== "idle" && targetView === item.id ? "pending" : ""}`} onClick={() => changeView(item.id)}><span>{item.icon}</span><small>{item.label}</small></button>)}
       </nav>

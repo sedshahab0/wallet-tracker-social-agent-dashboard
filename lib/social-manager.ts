@@ -1,5 +1,11 @@
 import type { DailyManagerPlan, LiveSource } from "@/lib/social-manager-types";
-import { PRODUCT_PROFILE_URL, PRODUCT_WEBSITE_URL, VERIFIED_PROJECT_SOURCE } from "@/lib/project-knowledge";
+import {
+  PRODUCT_PROFILE_URL,
+  PRODUCT_WEBSITE_URL,
+  PROJECT_CONTEXT_GENERATED_AT,
+  PROJECT_CONTEXT_REVISION,
+  VERIFIED_PROJECT_SOURCE,
+} from "@/lib/project-knowledge";
 
 type FirecrawlHit = { title?: string; url?: string; description?: string; markdown?: string };
 type FirecrawlPayload = {
@@ -59,7 +65,7 @@ const managerSchema = {
         required: ["id", "time", "account", "postUrl", "reason", "comment", "language", "risk"],
         properties: {
           id: { type: "string" }, time: { type: "string" }, account: { type: "string" }, postUrl: { type: "string" }, reason: { type: "string" },
-          comment: { type: "string" }, language: { type: "string" }, risk: { type: "string", enum: ["green", "yellow", "red"] },
+          comment: { type: "string", maxLength: 240 }, language: { type: "string" }, risk: { type: "string", enum: ["green", "yellow", "red"] },
         },
       },
     },
@@ -139,7 +145,7 @@ async function firecrawlScrape(url: string, channel: LiveSource["channel"]): Pro
   return [{ title: payload.data?.metadata?.title || new URL(url).hostname, url: payload.data?.metadata?.sourceURL || url, description: markdown, channel }];
 }
 
-export async function collectLiveSources(date: string) {
+export async function collectLiveSources(date: string, focus = "") {
   const queries = [
     firecrawlScrape(PRODUCT_PROFILE_URL, "account"),
     firecrawlScrape(PRODUCT_WEBSITE_URL, "product"),
@@ -149,6 +155,10 @@ export async function collectLiveSources(date: string) {
     firecrawlSearch(`crypto wallet monitoring transaction alert product news ${date}`, "news", { limit: 8, tbs: "qdr:w", hydrate: true, sources: ["news", "web"] }),
     firecrawlSearch("on-chain wallet analytics security tools launch update", "competitor", { limit: 8, tbs: "qdr:m", hydrate: true, sources: ["news", "web"] }),
     firecrawlSearch("site:wallettracker.app Wallet Tracker", "product", { limit: 6, hydrate: true }),
+    ...(focus.trim().length >= 8 ? [
+      firecrawlSearch(`${focus.trim()} Wallet Tracker crypto wallet`, "news", { limit: 8, tbs: "qdr:m", hydrate: true, sources: ["news", "web"] }),
+      firecrawlSearch(`site:x.com/*/status ${focus.trim()} -giveaway -airdrop`, "x", { limit: 8, tbs: "qdr:m", hydrate: true }),
+    ] : []),
   ];
   const settled = await Promise.allSettled(queries);
   const seen = new Set<string>();
@@ -193,7 +203,10 @@ function evidenceBoundPlan(
   const interactions = generated.interactions.flatMap((interaction) => {
     const postUrl = keepEvidenceUrl(interaction.postUrl);
     const source = allowed.get(postUrl);
-    if (!postUrl || source?.channel !== "x" || !/^https:\/\/(?:www\.)?x\.com\/[^/]+\/status\/\d+/.test(postUrl)) return [];
+    const evidence = source?.description.toLocaleLowerCase() || "";
+    const unsafeTarget = /(giveaway|airdrop|referral|seed phrase|private key|guaranteed profit|free token|wallet drainer)/i.test(evidence);
+    const genericComment = /^(great|nice|amazing|love this|thanks for sharing|interesting)[!. ]*$/i.test(interaction.comment.trim());
+    if (!postUrl || source?.channel !== "x" || unsafeTarget || genericComment || !/^https:\/\/(?:www\.)?x\.com\/[^/]+\/status\/\d+/.test(postUrl)) return [];
     return [{ ...interaction, postUrl }];
   });
   const signals = generated.signals.flatMap((signal) => {
@@ -209,7 +222,7 @@ function evidenceBoundPlan(
   return { ...generated, posts, interactions, signals, tasks };
 }
 
-export async function buildDailyPlan(date: string, sources: LiveSource[]): Promise<DailyManagerPlan> {
+export async function buildDailyPlan(date: string, sources: LiveSource[], focus = ""): Promise<DailyManagerPlan> {
   const apiKey = process.env.XAI_API_KEY?.trim();
   if (!apiKey) throw new Error("کلید xAI روی سرور تنظیم نشده است.");
   const response = await fetch("https://api.x.ai/v1/chat/completions", {
@@ -219,8 +232,8 @@ export async function buildDailyPlan(date: string, sources: LiveSource[]): Promi
       model: process.env.XAI_TEXT_MODEL?.trim() || "grok-4.3",
       temperature: 0.25,
       messages: [
-        { role: "system", content: `You are the full-service X brand manager for Wallet Tracker. Produce a safe, evidence-based daily operating plan for a non-expert human operator. All operator instructions and explanations must be Persian. Public posts and comments should normally be natural English unless the target post is another language. Never invent product capabilities, metrics, partnerships, transactions, networks, or news. Treat [project] sources as verified first-party repository facts and all other sources as live public context. Every factual post must cite only supplied source URLs. Keep each X post at most 260 characters. Do not recommend mass following, repetitive comments, engagement bait, financial advice, automated posting, or any X API discovery request. Customer-facing posts must lead with user value and clear outcomes; never mention NestJS, WebSockets, repositories, backend architecture, or implementation details unless the requested topic is explicitly for developers. If the [account] sources show no posts, or no account post is discoverable, this is bootstrap mode: create one truthful introductory post from verified [project] facts instead of pausing merely because external mentions are absent. In bootstrap mode the first post should clearly explain what Wallet Tracker does in plain language, invite people to follow product progress, and avoid unsupported claims. Pause only when even first-party evidence is insufficient or a real safety risk exists. Schedule 1-2 quality posts maximum and 2-4 meaningful interactions. Every image prompt must be 16:9, premium black/orange Wallet Tracker visual, directly related to the exact post, no logos of other companies and no tiny text.` },
-        { role: "user", content: `Date: ${date}\n\nLive sources collected by Firecrawl:\n${sourceContext(sources)}` },
+        { role: "system", content: `You are the full-service X brand manager for Wallet Tracker. The complete [project] source is the binding project-truth document and includes an explicit confidence table, network truth table, safety rules, content policy, and interaction policy. Follow it exactly. Produce a safe, evidence-based daily operating plan for a non-expert human operator. All operator instructions and explanations must be Persian. Public posts and comments should normally be natural English unless the target post is another language. Never invent product capabilities, metrics, partnerships, transactions, networks, availability, news, customer stories, or release dates. Treat [project] as audited first-party facts and all other sources as live public context. Every factual post must cite only supplied source URLs. Keep each X post at most 260 characters. Do not recommend mass following, repetitive comments, engagement bait, financial advice, automated posting, or any X API discovery request. Customer-facing posts must lead with user value and clear outcomes; never mention frameworks, repositories, backend architecture, internal providers or implementation details unless the requested topic is explicitly technical. If the [account] sources show no posts, or no account post is discoverable, this is bootstrap mode: create one truthful introductory post from verified [project] facts instead of pausing merely because external mentions are absent. Pause only when even first-party evidence is insufficient or a real safety risk exists. Schedule 1-2 quality posts maximum and 2-4 meaningful interactions. An interaction is valid only when it points to an exact supplied X status URL and adds a concrete insight or useful question before any product mention. Never exploit a security incident for promotion. Every image prompt must be 16:9, premium black/orange Wallet Tracker visual, directly related to the exact post, no logos of other companies and no tiny text.` },
+        { role: "user", content: `Date: ${date}\nRequested editorial focus: ${focus.trim() || "none; choose from evidence"}\n\nLive sources collected by Firecrawl:\n${sourceContext(sources)}` },
       ],
       response_format: { type: "json_schema", json_schema: { name: "wallet_tracker_daily_plan", strict: true, schema: managerSchema } },
     }),
@@ -232,7 +245,15 @@ export async function buildDailyPlan(date: string, sources: LiveSource[]): Promi
   if (!raw) throw new Error("xAI برنامه ساختاریافته‌ای برنگرداند.");
   const generated = JSON.parse(raw) as Omit<DailyManagerPlan, "date" | "generatedAt" | "mode" | "sources">;
   const verified = evidenceBoundPlan(generated, sources);
-  return { ...verified, date, generatedAt: new Date().toISOString(), mode: "live", sources };
+  return {
+    ...verified,
+    date,
+    generatedAt: new Date().toISOString(),
+    contextRevision: PROJECT_CONTEXT_REVISION,
+    contextGeneratedAt: PROJECT_CONTEXT_GENERATED_AT,
+    mode: "live",
+    sources,
+  };
 }
 
 export async function notifyDailyPlan(request: Request, plan: DailyManagerPlan) {

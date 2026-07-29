@@ -1,5 +1,6 @@
 import { readDailyPlan, writeDailyPlan } from "@/lib/daily-plan-store";
 import { buildDailyPlan, collectLiveSources, notifyDailyPlan } from "@/lib/social-manager";
+import { PROJECT_CONTEXT_REVISION } from "@/lib/project-knowledge";
 
 export function tehranDate() {
   return new Intl.DateTimeFormat("en-CA", {
@@ -10,14 +11,14 @@ export function tehranDate() {
   }).format(new Date());
 }
 
-export async function runDailyManager(request: Request, force = false) {
+export async function runDailyManager(request: Request, force = false, focus = "") {
   const date = tehranDate();
   if (!force) {
     const cached = await readDailyPlan(date);
-    if (cached) return { plan: cached, cached: true, telegramNotified: false };
+    if (cached?.contextRevision === PROJECT_CONTEXT_REVISION) return { plan: cached, cached: true, telegramNotified: false };
   }
-  const sources = await collectLiveSources(date);
-  const plan = await buildDailyPlan(date, sources);
+  const sources = await collectLiveSources(date, focus);
+  const plan = await buildDailyPlan(date, sources, focus);
   await writeDailyPlan(plan);
   const telegramNotified = await notifyDailyPlan(request, plan).catch(() => false);
   return { plan, cached: false, telegramNotified };

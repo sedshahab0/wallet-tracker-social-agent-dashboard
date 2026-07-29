@@ -1,24 +1,9 @@
-type XUser = {
-  id: string;
-  name: string;
-  username: string;
-  profile_image_url?: string;
-  verified?: boolean;
-  public_metrics?: {
-    followers_count?: number;
-    following_count?: number;
-    tweet_count?: number;
-  };
-};
-
 type XEnvelope<T> = {
   data?: T;
   errors?: Array<{ title?: string; detail?: string; type?: string }>;
   title?: string;
   detail?: string;
 };
-
-let cachedAccount: { value: XUser; expiresAt: number } | null = null;
 
 export class XApiError extends Error {
   constructor(
@@ -39,10 +24,6 @@ export function xAccountId() {
   return process.env.X_ACCOUNT_ID?.trim() || "";
 }
 
-export function xApiIsConfigured() {
-  return Boolean(process.env.X_BEARER_TOKEN?.trim() && xAccountUsername() && xAccountId());
-}
-
 export function xOwnedPollingIsConfigured() {
   return Boolean(
     process.env.X_API_KEY?.trim() &&
@@ -51,10 +32,6 @@ export function xOwnedPollingIsConfigured() {
       process.env.X_ACCESS_TOKEN_SECRET?.trim() &&
       xAccountId(),
   );
-}
-
-function bearerToken() {
-  return process.env.X_BEARER_TOKEN?.trim() || "";
 }
 
 function apiError(status: number, payload: XEnvelope<unknown>) {
@@ -71,19 +48,6 @@ function apiError(status: number, payload: XEnvelope<unknown>) {
     return new XApiError("محدودیت موقت X API فعال شده است؛ چند دقیقه دیگر دوباره امتحان کنید.", 429, "rate_limited");
   }
   return new XApiError("X API پاسخ معتبری نداد؛ وضعیت App و دسترسی‌ها را در Developer Console بررسی کنید.", status || 502, "x_api_error");
-}
-
-export async function xGet<T>(path: string) {
-  if (!xApiIsConfigured()) {
-    throw new XApiError("کلیدهای X API هنوز روی سرور تنظیم نشده‌اند.", 503, "invalid_credentials");
-  }
-  const response = await fetch(`https://api.x.com${path}`, {
-    headers: { authorization: `Bearer ${bearerToken()}` },
-    signal: AbortSignal.timeout(12_000),
-  });
-  const payload = (await response.json().catch(() => ({}))) as XEnvelope<T>;
-  if (!response.ok || payload.data === undefined) throw apiError(response.status, payload);
-  return payload;
 }
 
 function oauthEncode(value: string) {
@@ -143,12 +107,4 @@ export async function xGetOwned<T>(path: string) {
   const payload = (await response.json().catch(() => ({}))) as XEnvelope<T> & Record<string, unknown>;
   if (!response.ok) throw apiError(response.status, payload);
   return payload;
-}
-
-export async function resolveXAccount() {
-  if (cachedAccount && cachedAccount.expiresAt > Date.now()) return cachedAccount.value;
-  const username = encodeURIComponent(xAccountUsername());
-  const payload = await xGet<XUser>(`/2/users/by/username/${username}?user.fields=id,name,username,profile_image_url,verified,public_metrics`);
-  cachedAccount = { value: payload.data!, expiresAt: Date.now() + 5 * 60 * 1000 };
-  return cachedAccount.value;
 }

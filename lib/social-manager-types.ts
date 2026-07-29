@@ -46,6 +46,8 @@ export type DailyManagerInteraction = {
 export type DailyManagerPlan = {
   date: string;
   generatedAt: string;
+  contextRevision: string;
+  contextGeneratedAt: string;
   mode: "live";
   headline: string;
   strategy: string;

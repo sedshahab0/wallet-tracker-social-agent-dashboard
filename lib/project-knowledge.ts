@@ -1,4 +1,9 @@
 import type { LiveSource } from "@/lib/social-manager-types";
+import {
+  PROJECT_CONTEXT_GENERATED_AT,
+  PROJECT_CONTEXT_MARKDOWN,
+  PROJECT_CONTEXT_REVISION,
+} from "@/lib/generated-project-context";
 
 /**
  * First-party facts verified from the cloned Wallet Tracker backend repository.
@@ -6,16 +11,13 @@ import type { LiveSource } from "@/lib/social-manager-types";
  * has public mentions or historical posts.
  */
 export const VERIFIED_PROJECT_SOURCE: LiveSource = {
-  title: "دانش تأییدشده مخزن Wallet Tracker",
-  url: "urn:wallet-tracker:verified-repositories",
+  title: `دانش تأییدشده پنج مخزن Wallet Tracker · ${PROJECT_CONTEXT_REVISION.slice(0, 12)}`,
+  url: `urn:wallet-tracker:project-context:${PROJECT_CONTEXT_REVISION}`,
   channel: "project",
-  description: [
-    "Wallet Tracker helps people track cryptocurrency wallets using public blockchain activity.",
-    "Implemented product capabilities documented in the repository include tracking wallets, real-time notifications for new transactions via WebSockets, favorite-wallet management, and wallet search history.",
-    "The backend is implemented with NestJS, but implementation technologies are internal context and should not appear in customer-facing brand introductions unless the topic is explicitly technical.",
-    "The product uses public blockchain activity for monitoring; never claim investment performance, custody, partnerships, unsupported networks, or unreleased analytics.",
-  ].join(" "),
+  description: PROJECT_CONTEXT_MARKDOWN,
 };
+
+export { PROJECT_CONTEXT_GENERATED_AT, PROJECT_CONTEXT_MARKDOWN, PROJECT_CONTEXT_REVISION };
 
 export const PRODUCT_PROFILE_URL = "https://x.com/wallettrackerH";
 export const PRODUCT_WEBSITE_URL = "https://wallettracker.app";
