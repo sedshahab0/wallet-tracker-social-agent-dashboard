@@ -71,9 +71,20 @@ function cleanText(hit: FirecrawlHit) {
 async function firecrawlSearch(query: string, channel: LiveSource["channel"], limit = 5): Promise<LiveSource[]> {
   const apiKey = process.env.FIRECRAWL_API_KEY?.trim();
   if (!apiKey) throw new Error("کلید Firecrawl تنظیم نشده است.");
-  const response = await fetch("https://api.firecrawl.dev/v2/search", {
+  const proxyUrl = process.env.FIRECRAWL_PROXY_URL?.trim();
+  const proxySecret = process.env.RESEARCH_PROXY_SECRET?.trim();
+  const proxyBearer = process.env.FIRECRAWL_PROXY_BEARER?.trim();
+  const endpoint = proxyUrl && proxySecret ? proxyUrl : "https://api.firecrawl.dev/v2/search";
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  if (endpoint === proxyUrl) {
+    headers["x-research-proxy-key"] = proxySecret!;
+    if (proxyBearer) headers["OAI-Sites-Authorization"] = `Bearer ${proxyBearer}`;
+  } else {
+    headers.authorization = `Bearer ${apiKey}`;
+  }
+  const response = await fetch(endpoint, {
     method: "POST",
-    headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
+    headers,
     body: JSON.stringify({ query, sources: ["web"], limit, ignoreInvalidURLs: true, timeout: 45_000 }),
     signal: AbortSignal.timeout(55_000),
   });

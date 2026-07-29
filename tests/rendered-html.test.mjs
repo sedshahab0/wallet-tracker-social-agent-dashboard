@@ -216,6 +216,8 @@ test("builds an evidence-bound daily manager with Firecrawl and xAI", async () =
   assert.match(manager, /api\.firecrawl\.dev\/v2\/search/);
   assert.match(manager, /site:x\.com/);
   assert.match(manager, /Promise\.allSettled/);
+  assert.match(manager, /FIRECRAWL_PROXY_URL/);
+  assert.match(manager, /x-research-proxy-key/);
   assert.match(manager, /api\.x\.ai\/v1\/chat\/completions/);
   assert.match(manager, /json_schema/);
   assert.match(manager, /evidenceBoundPlan/);
