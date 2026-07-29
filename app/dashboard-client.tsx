@@ -305,6 +305,11 @@ function useDailyManagerPlan() {
   const [stage, setStage] = useState("در حال بررسی برنامه ذخیره‌شده امروز…");
   const [imageErrors, setImageErrors] = useState<Record<string, string>>({});
   const imageRequests = useRef(new Set<string>());
+  const planRef = useRef<DailyManagerPlan | null>(null);
+
+  useEffect(() => {
+    planRef.current = plan;
+  }, [plan]);
 
   const generateImages = useCallback(async (dailyPlan: DailyManagerPlan, force = false) => {
     const storageKey = `wallet-social-manager-images-${dailyPlan.date}`;
@@ -334,28 +339,104 @@ function useDailyManagerPlan() {
     setStage("برنامه زنده امروز آماده اجراست");
   }, []);
 
+  const readPlanPayload = useCallback(async (response: Response) => {
+    const raw = await response.text();
+    if (!raw.trim()) {
+      throw new Error(response.status === 499 || response.status === 408 || response.status >= 500
+        ? "اتصال هنگام ساخت برنامه قطع شد. در حال بررسی نتیجه روی سرور…"
+        : "پاسخ خالی از سرور دریافت شد.");
+    }
+    try {
+      return JSON.parse(raw) as { ok?: boolean; plan?: DailyManagerPlan; error?: string; missing?: boolean };
+    } catch {
+      throw new Error("پاسخ سرور قابل خواندن نبود.");
+    }
+  }, []);
+
+  const tryReadCachedPlan = useCallback(async (options: { newerThan?: string } = {}) => {
+    try {
+      const response = await fetch("/api/manager/daily-plan", { cache: "no-store" });
+      if (!response.ok) return null;
+      const payload = await readPlanPayload(response);
+      if (!payload.ok || !payload.plan) return null;
+      if (options.newerThan && !(Date.parse(payload.plan.generatedAt) > Date.parse(options.newerThan))) return null;
+      return payload.plan;
+    } catch {
+      return null;
+    }
+  }, [readPlanPayload]);
+
+  const recoverPlan = useCallback(async (options: { newerThan?: string; attempts?: number } = {}) => {
+    const attempts = options.attempts ?? 12;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      await new Promise((resolve) => window.setTimeout(resolve, attempt === 0 ? 1200 : 2500));
+      const plan = await tryReadCachedPlan(options);
+      if (plan) return plan;
+    }
+    return null;
+  }, [tryReadCachedPlan]);
+
   const load = useCallback(async (force = false, focus = "") => {
     setLoading(true);
     setError("");
+    const previousGeneratedAt = planRef.current?.generatedAt;
     setStage(force ? "در حال جمع‌آوری دوباره داده‌های زنده X و وب…" : "در حال دریافت برنامه هوشمند امروز…");
     try {
       let response = await fetch("/api/manager/daily-plan", { cache: "no-store" });
       if (response.status === 404 || force) {
         setStage("Firecrawl در حال بررسی X، اخبار و منابع محصول است…");
-        response = await fetch("/api/manager/daily-plan", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ force, focus }) });
+        // Mobile Safari often drops long POSTs (nginx 499) while the server still
+        // finishes. Poll GET in parallel so a completed plan is recovered.
+        let postSettled = false;
+        const postPromise = fetch("/api/manager/daily-plan", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ force, focus }) })
+          .then(async (postResponse) => {
+            const payload = await readPlanPayload(postResponse);
+            if (!postResponse.ok || !payload.ok || !payload.plan) throw new Error(payload.error || "برنامه امروز دریافت نشد.");
+            return payload.plan;
+          })
+          .finally(() => { postSettled = true; });
+
+        while (!postSettled) {
+          await new Promise((resolve) => window.setTimeout(resolve, 2500));
+          if (postSettled) break;
+          const recovered = await tryReadCachedPlan(previousGeneratedAt ? { newerThan: previousGeneratedAt } : {});
+          if (recovered) {
+            setPlan(recovered);
+            setStage("برنامه زنده آماده شد؛ تصاویر در حال تکمیل‌اند…");
+            void generateImages(recovered);
+            void postPromise.catch(() => undefined);
+            return;
+          }
+        }
+
+        const planFromPost = await postPromise;
+        setPlan(planFromPost);
+        setStage("برنامه زنده آماده شد؛ تصاویر در حال تکمیل‌اند…");
+        void generateImages(planFromPost);
+        return;
       }
-      const payload = await response.json() as { ok?: boolean; plan?: DailyManagerPlan; error?: string };
+      const payload = await readPlanPayload(response);
       if (!response.ok || !payload.ok || !payload.plan) throw new Error(payload.error || "برنامه امروز دریافت نشد.");
       setPlan(payload.plan);
       setStage("برنامه زنده آماده شد؛ تصاویر در حال تکمیل‌اند…");
       void generateImages(payload.plan);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "دریافت برنامه زنده ناموفق بود.");
-      setStage("برنامه زنده در دسترس نیست");
+      setStage(force ? "اتصال قطع شد؛ در حال بازیابی برنامه از سرور…" : "در حال بازیابی برنامه ذخیره‌شده…");
+      const recovered = await recoverPlan(force && previousGeneratedAt ? { newerThan: previousGeneratedAt, attempts: 16 } : { attempts: 8 });
+      if (recovered) {
+        setPlan(recovered);
+        setError("");
+        setStage("برنامه زنده آماده شد؛ تصاویر در حال تکمیل‌اند…");
+        void generateImages(recovered);
+        return;
+      }
+      const message = reason instanceof Error ? reason.message : "دریافت برنامه زنده ناموفق بود.";
+      setError(message);
+      setStage(planRef.current ? "بازسازی کامل نشد؛ برنامه قبلی هنوز قابل استفاده است" : "برنامه زنده در دسترس نیست");
     } finally {
       setLoading(false);
     }
-  }, [generateImages]);
+  }, [generateImages, readPlanPayload, recoverPlan, tryReadCachedPlan]);
 
   useEffect(() => { const timer = window.setTimeout(() => void load(false), 0); return () => window.clearTimeout(timer); }, [load]);
   return {
@@ -563,7 +644,7 @@ function Overview({ onNavigate, manager, agentSignals }: { onNavigate: (view: Vi
         <div className="today-clock"><span>{plan ? "هدف امروز" : "وضعیت"}</span><strong>{plan?.publishDecision === "pause" ? "توقف انتشار" : plan ? `${plan.tasks.length.toLocaleString("fa-IR")} کار` : "در حال تحلیل"}</strong><small>{plan?.todayGoal || stage}</small></div>
       </div>
 
-      <div className={`manager-live-strip panel ${error ? "has-error" : ""}`}><div><i className="status-dot"/><span><strong>{stage}</strong><small>{plan ? `آخرین تحلیل: ${new Date(plan.generatedAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" })} · ${plan.sources.length.toLocaleString("fa-IR")} منبع زنده · دانش پروژه ${plan.contextRevision.slice(0, 8)}` : error || "این فرایند در اولین ورود هر روز خودکار اجرا می‌شود."}</small></span></div><button className="btn quiet" disabled={loading} onClick={() => void regenerate()}>{loading ? "در حال ساخت…" : "بازسازی با داده تازه ↻"}</button></div>
+      <div className={`manager-live-strip panel ${error ? "has-error" : ""}`}><div><i className="status-dot"/><span><strong>{stage}</strong><small>{error ? error : plan ? `آخرین تحلیل: ${new Date(plan.generatedAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" })} · ${plan.sources.length.toLocaleString("fa-IR")} منبع زنده · دانش پروژه ${plan.contextRevision.slice(0, 8)}` : "این فرایند در اولین ورود هر روز خودکار اجرا می‌شود."}</small></span></div><button className="btn quiet" disabled={loading} onClick={() => void regenerate()}>{loading ? "در حال ساخت…" : "بازسازی با داده تازه ↻"}</button></div>
 
       {plan && <article className={`publish-decision panel ${plan.publishDecision}`}><span>{plan.publishDecision === "publish" ? "امروز منتشر می‌کنیم" : plan.publishDecision === "light" ? "امروز سبک منتشر می‌کنیم" : "امروز پست تازه نمی‌گذاریم"}</span><strong>{plan.publishReason}</strong></article>}
 

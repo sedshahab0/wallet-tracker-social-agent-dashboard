@@ -307,6 +307,9 @@ test("builds an evidence-bound daily manager with Firecrawl and xAI", async () =
   assert.match(exampleEnv, /SOCIAL_MANAGER_CRON_SECRET=\n/);
   assert.match(timer, /06:15:00 Asia\/Tehran/);
   assert.match(runner, /enrichPlanInteractions/);
+  assert.match(runner, /writeDailyPlan\(draftPlan\)/);
+  assert.match(page, /tryReadCachedPlan|postSettled/);
+  assert.match(page, /بازسازی کامل نشد؛ برنامه قبلی هنوز قابل استفاده است/);
   assert.match(scorer, /reachScore|scoreInteraction|enrichPlanInteractions/);
   assert.match(registry, /WhaleAlert|tierFromFollowerCount/);
   assert.match(historyLib, /historySummaryForPrompt|wasPostRecentlyEngaged/);
@@ -385,6 +388,8 @@ test("tracks Grok and Firecrawl usage for the manager budget page", async () => 
   assert.match(page, /BudgetViewSkeleton/);
   assert.match(page, /wallet-social-usage-cache-v1/);
   assert.match(page, /readUsageCache/);
+  assert.match(page, /recoverPlan|در حال بازیابی برنامه/);
+  assert.match(page, /بازسازی کامل نشد؛ برنامه قبلی هنوز قابل استفاده است/);
   assert.match(exampleEnv, /XAI_MONTHLY_TOKEN_BUDGET=500000/);
   assert.match(exampleEnv, /FIRECRAWL_MONTHLY_CREDIT_BUDGET=3000/);
   assert.match(usageTracker, /mutationQueue/);

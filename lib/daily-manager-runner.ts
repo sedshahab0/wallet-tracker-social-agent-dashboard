@@ -52,6 +52,9 @@ export async function runDailyManager(request: Request, force = false, focus = "
     researchBridgeForPrompt(researchBridge),
     accountIntelligenceContext(accountState),
   );
+  // Persist the draft before enrichment so a mobile client that times out
+  // can still recover a usable plan via GET while scrapes finish.
+  await writeDailyPlan(draftPlan);
   const plan = await enrichPlanInteractions(draftPlan, history);
   await writeDailyPlan(plan);
   const telegramNotified = await notifyDailyPlan(request, plan).catch(() => false);
