@@ -30,6 +30,13 @@ test("server-renders the secure Persian login", async () => {
   assert.match(html, /<form[^>]+novalidate/i);
 });
 
+test("lets the branded application login handle production authentication", async () => {
+  const nginx = await readFile(new URL("../deploy/nginx-agent.wallettracker.app.conf", import.meta.url), "utf8");
+  assert.doesNotMatch(nginx, /auth_basic\s+"/);
+  assert.doesNotMatch(nginx, /auth_basic_user_file/);
+  assert.match(nginx, /proxy_pass http:\/\/127\.0\.0\.1:3002/);
+});
+
 test("protects dashboard routes and preserves the requested destination", async () => {
   const rootResponse = await render();
   assert.equal(rootResponse.status, 307);
