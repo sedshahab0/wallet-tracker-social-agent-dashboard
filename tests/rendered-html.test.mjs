@@ -382,6 +382,9 @@ test("tracks Grok and Firecrawl usage for the manager budget page", async () => 
   assert.match(page, /اعتبار زنده Firecrawl/);
   assert.match(page, /مانده \{xaiRemaining/);
   assert.match(page, /tokensRemaining/);
+  assert.match(page, /BudgetViewSkeleton/);
+  assert.match(page, /wallet-social-usage-cache-v1/);
+  assert.match(page, /readUsageCache/);
   assert.match(exampleEnv, /XAI_MONTHLY_TOKEN_BUDGET=500000/);
   assert.match(exampleEnv, /FIRECRAWL_MONTHLY_CREDIT_BUDGET=3000/);
   assert.match(usageTracker, /mutationQueue/);

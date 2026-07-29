@@ -500,6 +500,60 @@ function ViewSkeleton() {
   );
 }
 
+const USAGE_CACHE_KEY = "wallet-social-usage-cache-v1";
+
+type XUsageSnapshot = { resourceReads: number; budgetUsed: number; updatedAt: string };
+type AiUsageSnapshot = {
+  month: string;
+  updatedAt: string;
+  xai: { chatRequests: number; promptTokens: number; completionTokens: number; totalTokens: number; imageGenerations: number; tokenBudget: number; tokensRemaining?: number; tokenPercent: number; model: string; imageModel: string };
+  firecrawl: { searches: number; scrapes: number; failures: number; creditsUsedEstimate: number; creditBudget: number; creditsRemainingEstimate?: number; creditPercent: number; live: { remainingCredits?: number; planCredits?: number } | null };
+};
+
+function readUsageCache(): { xUsage: XUsageSnapshot; aiUsage: AiUsageSnapshot } | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(USAGE_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { xUsage?: XUsageSnapshot; aiUsage?: AiUsageSnapshot };
+    if (!parsed.xUsage || !parsed.aiUsage) return null;
+    return { xUsage: parsed.xUsage, aiUsage: parsed.aiUsage };
+  } catch {
+    return null;
+  }
+}
+
+function writeUsageCache(xUsage: XUsageSnapshot, aiUsage: AiUsageSnapshot) {
+  try {
+    window.sessionStorage.setItem(USAGE_CACHE_KEY, JSON.stringify({ xUsage, aiUsage }));
+  } catch {
+    // Ignore quota errors; live data still renders.
+  }
+}
+
+function BudgetViewSkeleton() {
+  return (
+    <section className="budget-layout budget-skeleton" aria-label="در حال دریافت مصرف API" aria-busy="true">
+      <div className="skeleton skeleton-panel budget-hero-skeleton"><i className="short" /><i className="medium" /><i className="short" /></div>
+      {[1, 2, 3].map((section) => (
+        <article className="panel usage-section budget-section-skeleton" key={section}>
+          <div className="skeleton skeleton-line short" />
+          <div className="skeleton budget-bar-skeleton" />
+          <div className="usage-grid">
+            {[1, 2, 3, 4].map((card) => (
+              <div className="usage-card compact skeleton-card" key={card}>
+                <i className="short" />
+                <i className="number" />
+                <i className="medium" />
+              </div>
+            ))}
+          </div>
+        </article>
+      ))}
+    </section>
+  );
+}
+
 function Overview({ onNavigate, manager, agentSignals }: { onNavigate: (view: View) => void; manager: ReturnType<typeof useDailyManagerPlan>; agentSignals: AgentSignals | null }) {
   const { plan, loading, error, stage, regenerate } = manager;
   return (
@@ -1081,18 +1135,13 @@ function GrowthView({ plan, interactionRecords, agentSignals }: { plan: DailyMan
 
 
 function BudgetView() {
-  const [xUsage, setXUsage] = useState<{ resourceReads: number; budgetUsed: number; updatedAt: string } | null>(null);
-  const [aiUsage, setAiUsage] = useState<{
-    month: string;
-    updatedAt: string;
-    xai: { chatRequests: number; promptTokens: number; completionTokens: number; totalTokens: number; imageGenerations: number; tokenBudget: number; tokensRemaining?: number; tokenPercent: number; model: string; imageModel: string };
-    firecrawl: { searches: number; scrapes: number; failures: number; creditsUsedEstimate: number; creditBudget: number; creditsRemainingEstimate?: number; creditPercent: number; live: { remainingCredits?: number; planCredits?: number } | null };
-  } | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [xUsage, setXUsage] = useState<XUsageSnapshot | null>(() => readUsageCache()?.xUsage ?? null);
+  const [aiUsage, setAiUsage] = useState<AiUsageSnapshot | null>(() => readUsageCache()?.aiUsage ?? null);
+  const [loading, setLoading] = useState(() => !readUsageCache());
   const [error, setError] = useState("");
 
-  const loadUsage = useCallback(async () => {
-    setLoading(true);
+  const loadUsage = useCallback(async (options: { silent?: boolean } = {}) => {
+    if (!options.silent) setLoading(true);
     setError("");
     try {
       const [inboxResponse, aiResponse] = await Promise.all([
@@ -1100,11 +1149,13 @@ function BudgetView() {
         fetch("/api/manager/usage", { cache: "no-store" }),
       ]);
       const inboxPayload = await inboxResponse.json() as { ok?: boolean; resourceReads?: number; budgetUsed?: number; updatedAt?: string; error?: string };
-      const aiPayload = await aiResponse.json() as { ok?: boolean; usage?: typeof aiUsage; error?: string };
+      const aiPayload = await aiResponse.json() as { ok?: boolean; usage?: AiUsageSnapshot; error?: string };
       if (!inboxResponse.ok || !inboxPayload.ok) throw new Error(inboxPayload.error || "دریافت مصرف X ناموفق بود.");
       if (!aiResponse.ok || !aiPayload.ok || !aiPayload.usage) throw new Error(aiPayload.error || "دریافت مصرف Grok/Firecrawl ناموفق بود.");
-      setXUsage({ resourceReads: inboxPayload.resourceReads || 0, budgetUsed: inboxPayload.budgetUsed || 0, updatedAt: inboxPayload.updatedAt || "" });
+      const nextXUsage = { resourceReads: inboxPayload.resourceReads || 0, budgetUsed: inboxPayload.budgetUsed || 0, updatedAt: inboxPayload.updatedAt || "" };
+      setXUsage(nextXUsage);
       setAiUsage(aiPayload.usage);
+      writeUsageCache(nextXUsage, aiPayload.usage);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "دریافت مصرف ناموفق بود.");
     } finally {
@@ -1113,9 +1164,12 @@ function BudgetView() {
   }, []);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => void loadUsage(), 0);
+    const timer = window.setTimeout(() => void loadUsage({ silent: Boolean(readUsageCache()) }), 0);
     return () => window.clearTimeout(timer);
   }, [loadUsage]);
+
+  const hasUsage = Boolean(xUsage && aiUsage);
+  if (!hasUsage && loading) return <BudgetViewSkeleton />;
 
   const budgetUsed = Math.min(5, xUsage?.budgetUsed || 0);
   const budgetPercent = Math.min(100, (budgetUsed / 5) * 100);

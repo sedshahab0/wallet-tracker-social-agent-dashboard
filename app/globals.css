@@ -229,6 +229,26 @@ button:disabled { cursor: not-allowed; }
 .usage-card strong { display: block; margin: 13px 0 4px; font-size: 27px; }
 .usage-card p { margin: 0 0 12px; color: var(--text-2); font-size: 9px; }
 .usage-card small { color: var(--muted); font-size: 8px; }
+.budget-skeleton { animation: skeleton-enter 220ms ease both; }
+.budget-hero-skeleton { min-height: 132px; padding: 28px; }
+.budget-hero-skeleton i { display: block; border-radius: 6px; background: #282828; }
+.budget-hero-skeleton .short { width: 34%; height: 11px; margin-bottom: 14px; }
+.budget-hero-skeleton .medium { width: 52%; height: 28px; margin-bottom: 12px; }
+.budget-hero-skeleton i:last-child { width: 68%; height: 11px; }
+.budget-section-skeleton { display: grid; gap: 0; }
+.budget-section-skeleton .skeleton-line { width: 38%; height: 11px; margin-bottom: 14px; }
+.budget-bar-skeleton { height: 10px; margin-top: 4px; border-radius: 99px; }
+.skeleton-card { display: grid; gap: 0; border-color: transparent !important; background: transparent !important; }
+.skeleton-card i { display: block; border-radius: 6px; background: #282828; }
+.skeleton-card .short { width: 46%; height: 9px; margin-bottom: 12px; }
+.skeleton-card .number { width: 38%; height: 24px; margin-bottom: 10px; }
+.skeleton-card .medium { width: 72%; height: 9px; }
+.budget-section-skeleton:nth-child(2) .skeleton-card:nth-child(2) { animation-delay: 45ms; }
+.budget-section-skeleton:nth-child(2) .skeleton-card:nth-child(3) { animation-delay: 90ms; }
+.budget-section-skeleton:nth-child(2) .skeleton-card:nth-child(4) { animation-delay: 135ms; }
+.budget-section-skeleton:nth-child(3) .usage-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.budget-section-skeleton:nth-child(4) .usage-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
 .alert-policy { margin-top: 12px; }
 .policy-row { display: grid; grid-template-columns: 45px 1fr auto; align-items: center; gap: 14px; padding: 14px 0; border-top: 1px solid var(--line-soft); }
 .policy-level { display: grid; width: 40px; height: 40px; place-items: center; border-radius: 10px; font-size: 9px; font-weight: 700; }
