@@ -28,5 +28,6 @@ test("classifies own-account stage from public post count", () => {
 test("matches published text with high token overlap", () => {
   const haystack = "Wallet Tracker helps you monitor cryptocurrency wallets using public blockchain activity. Track wallets, receive real-time transaction alerts.";
   assert.equal(textLooksPublished(haystack, "Wallet Tracker helps you monitor cryptocurrency wallets using public blockchain activity"), true);
+  assert.equal(textLooksPublished(haystack, "You only need a public wallet address to follow on-chain activity never a seed phrase or private key"), false);
   assert.equal(textLooksPublished(haystack, "completely unrelated airdrop giveaway seed phrase"), false);
 });

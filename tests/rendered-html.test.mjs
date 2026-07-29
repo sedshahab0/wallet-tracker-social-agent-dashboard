@@ -66,6 +66,9 @@ test("keeps the human publishing and Telegram workflows in the dashboard", async
   assert.match(page, /wallet-social-sent-replies/);
   assert.match(page, /wallet-social-content-items/);
   assert.match(page, /wallet-social-reply-items/);
+  assert.match(page, /contentFingerprint/);
+  assert.match(page, /برگرداندن به آماده/);
+  assert.match(page, /آماده انتشار/);
   assert.match(page, /reply-editor-form/);
   assert.match(page, /content-editor-form/);
   assert.match(page, /research-request-form/);

@@ -177,6 +177,12 @@ async function verifyPublication(kind: "post" | "reply", text: string, targetUrl
   return { verified: Boolean(payload.verified), matchedUrl: payload.matchedUrl || "", message: payload.message || "" };
 }
 
+function contentFingerprint(text: string) {
+  let hash = 0;
+  for (let index = 0; index < text.length; index += 1) hash = ((hash << 5) - hash + text.charCodeAt(index)) | 0;
+  return Math.abs(hash).toString(36).slice(0, 8);
+}
+
 function useStoredIds(key: string) {
   const [ids, setIds] = useState<string[]>([]);
   const [ready, setReady] = useState(false);
@@ -189,7 +195,8 @@ function useStoredIds(key: string) {
   }, [key]);
   useEffect(() => { if (ready) window.localStorage.setItem(key, JSON.stringify(ids)); }, [ids, key, ready]);
   const mark = (id: string) => setIds((current) => current.includes(id) ? current : [...current, id]);
-  return { ids, mark };
+  const unmark = (id: string) => setIds((current) => current.filter((item) => item !== id));
+  return { ids, mark, unmark };
 }
 
 function useStoredCollection<T>(key: string, initialItems: T[]) {
@@ -523,7 +530,7 @@ function RepliesView({ replyItems, onRepliesChange, sentIds, onMarkSent }: { rep
   );
 }
 
-function ContentView({ content, onContentChange, sentIds, onMarkSent, onRetryImages }: { content: ContentItem[]; onContentChange: (items: ContentItem[]) => void; sentIds: string[]; onMarkSent: (id: string) => void; onRetryImages: () => void }) {
+function ContentView({ content, onContentChange, sentIds, onMarkSent, onUnmarkSent, onRetryImages }: { content: ContentItem[]; onContentChange: (items: ContentItem[]) => void; sentIds: string[]; onMarkSent: (id: string) => void; onUnmarkSent: (id: string) => void; onRetryImages: () => void }) {
   const [filter, setFilter] = useState<"all" | Risk>("all");
   const [status, setStatus] = useState<"all" | "ready" | "sent">("all");
   const [toast, setToast] = useState("");
@@ -585,7 +592,7 @@ function ContentView({ content, onContentChange, sentIds, onMarkSent, onRetryIma
         {visibleItems.map((item) => {
           const isSent = sentIds.includes(item.id);
           return <article className={`panel content-card ${isSent ? "is-sent" : ""}`} key={item.id}>
-            <div className="content-card-top"><span className="content-type">{item.type}</span>{isSent ? <span className="sent-chip">{item.publishVerified ? "✓ در X تأیید شد" : "✓ منتشرشده"}</span> : <RiskBadge risk={item.risk} />}</div>
+            <div className="content-card-top"><span className="content-type">{item.type}</span>{isSent ? <span className="sent-chip">{item.publishVerified ? "✓ در X تأیید شد" : "✓ ثبت‌شده محلی"}</span> : <><span className="sent-chip ready">آماده انتشار</span><RiskBadge risk={item.risk} /></>}</div>
             <h3>{item.title}</h3><p>{item.body}</p>
             {item.imageUrl ? <div className="generated-post-image"><button className="image-preview-button" type="button" onClick={() => setPreviewImage({ src: item.imageUrl!, title: item.title })} aria-label={`بزرگ‌نمایی تصویر ${item.title}`}><Image src={item.imageUrl} alt={`تصویر اختصاصی ${item.title}`} width={1024} height={576} unoptimized /><i aria-hidden="true">⌕</i></button><span>برای مشاهده بزرگ‌تر روی تصویر بزنید</span></div> : item.imageError ? <div className="generated-post-image pending failed"><strong>تولید تصویر کامل نشد</strong><span>{item.imageError}</span><button className="btn quiet" onClick={onRetryImages}>تلاش دوباره برای تصویر</button></div> : <div className="generated-post-image pending"><span className="button-spinner"/><strong>تصویر اختصاصی در حال تولید است…</strong></div>}
             <div className="content-meta"><span>{item.language}</span><span>{item.time}</span></div>
@@ -593,7 +600,7 @@ function ContentView({ content, onContentChange, sentIds, onMarkSent, onRetryIma
             <div className="publish-copy" dir="auto"><span>متن نهایی برای X</span><p>{item.postText}</p></div>
             {item.matchedUrl && <a className="tweet-deep-link" href={item.matchedUrl} target="_blank" rel="noreferrer" dir="ltr">{item.matchedUrl}</a>}
             <div className="operator-steps compact"><span><b>۱</b> کپی</span><span><b>۲</b> انتشار در X</span><span><b>۳</b> تأیید با Firecrawl</span></div>
-            <div className="card-actions"><button className="btn quiet" onClick={() => openEditor(item)}>ویرایش</button><button className="btn accent" onClick={() => copyPost(item.postText)}>کپی متن</button><button className="btn primary" onClick={() => window.open("https://x.com/compose/post", "_blank", "noopener,noreferrer")}>بازکردن X ↗</button><button className={`btn sent-action ${isSent ? "done" : ""}`} disabled={isSent || verifyingId === item.id} onClick={() => void confirmPublished(item)}>{isSent ? (item.publishVerified ? "✓ در X تأیید شد" : "✓ انتشار ثبت شد") : verifyingId === item.id ? "در حال تأیید روی X…" : "من این پست را منتشر کردم"}</button></div>
+            <div className="card-actions"><button className="btn quiet" onClick={() => openEditor(item)}>ویرایش</button><button className="btn accent" onClick={() => copyPost(item.postText)}>کپی متن</button><button className="btn primary" onClick={() => window.open("https://x.com/compose/post", "_blank", "noopener,noreferrer")}>بازکردن X ↗</button>{isSent ? <button className="btn quiet" onClick={() => { onUnmarkSent(item.id); onContentChange(content.map((entry) => entry.id === item.id ? { ...entry, publishVerified: false, matchedUrl: undefined } : entry)); notify("پست دوباره به‌عنوان آماده انتشار علامت خورد"); }}>برگرداندن به آماده</button> : <button className={`btn sent-action ${isSent ? "done" : ""}`} disabled={verifyingId === item.id} onClick={() => void confirmPublished(item)}>{verifyingId === item.id ? "در حال تأیید روی X…" : "من این پست را منتشر کردم"}</button>}</div>
           </article>;
         })}
       </div>
@@ -952,10 +959,10 @@ export default function DashboardClient() {
   const [lastRefreshAt, setLastRefreshAt] = useState("");
   const [transitionPhase, setTransitionPhase] = useState<"idle" | "leaving" | "loading">("idle");
   const transitionTimers = useRef<number[]>([]);
-  const sentReplies = useStoredIds("wallet-social-sent-replies-live-v3");
-  const sentPosts = useStoredIds("wallet-social-sent-posts-live-v3");
-  const managedReplies = useStoredCollection<ReplyItem>("wallet-social-reply-items-live-v3", replies);
-  const managedContent = useStoredCollection<ContentItem>("wallet-social-content-items-live-v3", contentItems);
+  const sentReplies = useStoredIds("wallet-social-sent-replies-live-v4");
+  const sentPosts = useStoredIds("wallet-social-sent-posts-live-v4");
+  const managedReplies = useStoredCollection<ReplyItem>("wallet-social-reply-items-live-v4", replies);
+  const managedContent = useStoredCollection<ContentItem>("wallet-social-content-items-live-v4", contentItems);
   const dailyManager = useDailyManagerPlan();
   const setManagedContent = managedContent.setItems;
   const setManagedReplies = managedReplies.setItems;
@@ -993,10 +1000,25 @@ export default function DashboardClient() {
 
   useEffect(() => {
     if (!dailyManager.plan) return;
-    const generatedItems: ContentItem[] = dailyManager.plan.posts.map((post) => ({ id: `live-${dailyManager.plan!.date}-${post.id}`, type: "پیشنهاد زنده مدیر هوشمند", title: post.title, body: post.summaryFa, language: post.language, risk: post.risk, time: `امروز · ${post.time}`, source: `${post.sourceUrls.length.toLocaleString("fa-IR")} منبع تأییدشده · دانش پروژه یا Firecrawl`, postText: post.copy, imageUrl: post.imageUrl, imageError: dailyManager.imageErrors[post.id], sourceUrls: post.sourceUrls }));
+    const generatedItems: ContentItem[] = dailyManager.plan.posts.map((post) => ({
+      id: `live-${dailyManager.plan!.date}-${post.id}-${contentFingerprint(post.copy)}`,
+      type: "پیشنهاد زنده مدیر هوشمند",
+      title: post.title,
+      body: post.summaryFa,
+      language: post.language,
+      risk: post.risk,
+      time: `امروز · ${post.time}`,
+      source: `${post.sourceUrls.length.toLocaleString("fa-IR")} منبع تأییدشده · دانش پروژه یا Firecrawl`,
+      postText: post.copy,
+      imageUrl: post.imageUrl,
+      imageError: dailyManager.imageErrors[post.id],
+      sourceUrls: post.sourceUrls,
+    }));
     setManagedContent((current) => {
       const generatedIds = new Set(generatedItems.map((item) => item.id));
       const previous = current.filter((item) => item.id.startsWith("p-") && !generatedIds.has(item.id));
+      // Drop stale live-* cards from older plan revisions so a regenerated
+      // post with new copy is never stuck under a previous "sent" mark.
       return [...generatedItems, ...previous];
     });
   }, [dailyManager.imageErrors, dailyManager.plan, setManagedContent]);
@@ -1127,7 +1149,7 @@ export default function DashboardClient() {
             {view === "creative" && <CreativeView onNavigate={changeView} plan={dailyManager.plan} onGenerate={dailyManager.regenerate}/>}
             {view === "growth" && <GrowthView plan={dailyManager.plan}/>}
             {view === "replies" && <RepliesView replyItems={managedReplies.items} onRepliesChange={managedReplies.setItems} sentIds={sentReplies.ids} onMarkSent={sentReplies.mark}/>}
-            {view === "content" && <ContentView content={managedContent.items} onContentChange={managedContent.setItems} sentIds={sentPosts.ids} onMarkSent={sentPosts.mark} onRetryImages={() => void dailyManager.retryImages()}/>}
+            {view === "content" && <ContentView content={managedContent.items} onContentChange={managedContent.setItems} sentIds={sentPosts.ids} onMarkSent={sentPosts.mark} onUnmarkSent={sentPosts.unmark} onRetryImages={() => void dailyManager.retryImages()}/>}
             {view === "sent" && <SentView replyIds={sentReplies.ids} postIds={sentPosts.ids} replyItems={managedReplies.items} content={managedContent.items}/>}
             {view === "telegram" && <TelegramView/>}
             {view === "research" && <ResearchView onGenerate={dailyManager.regenerate}/>}

@@ -98,10 +98,13 @@ export function normalizeComparableText(value: string) {
 export function textLooksPublished(haystack: string, needle: string) {
   const source = normalizeComparableText(haystack);
   const target = normalizeComparableText(needle);
-  if (!source || !target || target.length < 18) return false;
-  if (source.includes(target)) return true;
+  if (!source || !target || target.length < 24) return false;
+  // Require a distinctive contiguous phrase so an older intro post cannot
+  // falsely verify a regenerated draft with a different message.
+  const phrase = target.slice(0, Math.min(48, target.length));
+  if (source.includes(phrase)) return true;
   const tokens = target.split(" ").filter((token) => token.length > 3);
-  if (tokens.length < 4) return source.includes(target.slice(0, Math.min(40, target.length)));
+  if (tokens.length < 6) return false;
   const hits = tokens.filter((token) => source.includes(token)).length;
-  return hits / tokens.length >= 0.72;
+  return hits / tokens.length >= 0.88;
 }
