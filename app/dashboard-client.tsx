@@ -209,6 +209,38 @@ function contentFingerprint(text: string) {
   return Math.abs(hash).toString(36).slice(0, 8);
 }
 
+type CachedPostImage = { imageUrl: string; promptKey: string };
+
+function postImageCacheKey(post: { id: string; title: string; copy: string; imagePrompt: string }) {
+  return contentFingerprint(`${post.id}\n${post.title}\n${post.copy}\n${post.imagePrompt}`);
+}
+
+function readPostImageCache(date: string): Record<string, CachedPostImage> {
+  try {
+    const raw = window.localStorage.getItem(`wallet-social-manager-images-v2-${date}`);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, CachedPostImage | string>;
+    const next: Record<string, CachedPostImage> = {};
+    for (const [id, value] of Object.entries(parsed)) {
+      if (typeof value === "string" && value.startsWith("data:")) next[id] = { imageUrl: value, promptKey: "" };
+      else if (value && typeof value === "object" && typeof value.imageUrl === "string" && typeof value.promptKey === "string") next[id] = value;
+    }
+    return next;
+  } catch {
+    return {};
+  }
+}
+
+function writePostImageCache(date: string, stored: Record<string, CachedPostImage>) {
+  try {
+    window.localStorage.setItem(`wallet-social-manager-images-v2-${date}`, JSON.stringify(stored));
+    // Drop the legacy id-only cache so regenerated posts never reuse yesterday's lookalike p1 image.
+    window.localStorage.removeItem(`wallet-social-manager-images-${date}`);
+  } catch {
+    // The in-memory image remains usable if browser storage is full.
+  }
+}
+
 function useStoredIds(key: string) {
   const [ids, setIds] = useState<string[]>([]);
   const [ready, setReady] = useState(false);
@@ -312,31 +344,55 @@ function useDailyManagerPlan() {
   }, [plan]);
 
   const generateImages = useCallback(async (dailyPlan: DailyManagerPlan, force = false) => {
-    const storageKey = `wallet-social-manager-images-${dailyPlan.date}`;
-    let stored: Record<string, string> = {};
-    try { stored = JSON.parse(localStorage.getItem(storageKey) || "{}"); } catch { stored = {}; }
-    if (Object.keys(stored).length) setPlan((current) => current ? { ...current, posts: current.posts.map((post) => ({ ...post, imageUrl: stored[post.id] || post.imageUrl })) } : current);
+    const stored = readPostImageCache(dailyPlan.date);
+    const matchedUrls: Record<string, string> = {};
     for (const post of dailyPlan.posts) {
-      if ((!force && stored[post.id]) || imageRequests.current.has(post.id)) continue;
+      const promptKey = postImageCacheKey(post);
+      const cached = stored[post.id];
+      if (!force && cached?.promptKey === promptKey && cached.imageUrl) matchedUrls[post.id] = cached.imageUrl;
+    }
+    if (Object.keys(matchedUrls).length) {
+      setPlan((current) => current
+        ? { ...current, posts: current.posts.map((post) => ({ ...post, imageUrl: matchedUrls[post.id] || post.imageUrl })) }
+        : current);
+    }
+    for (const post of dailyPlan.posts) {
+      const promptKey = postImageCacheKey(post);
+      const requestKey = `${post.id}:${promptKey}`;
+      if ((!force && matchedUrls[post.id]) || imageRequests.current.has(requestKey)) continue;
       if (force) delete stored[post.id];
-      imageRequests.current.add(post.id);
+      imageRequests.current.add(requestKey);
       try {
         setImageErrors((current) => { const next = { ...current }; delete next[post.id]; return next; });
         setStage(`در حال ساخت تصویر اختصاصی «${post.title}»…`);
         const response = await fetch("/api/manager/image", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ prompt: post.imagePrompt }) });
         const payload = await response.json() as { ok?: boolean; imageUrl?: string; error?: string };
         if (!response.ok || !payload.ok || !payload.imageUrl) throw new Error(payload.error || `تولید تصویر ناموفق بود (${response.status}).`);
-        stored[post.id] = payload.imageUrl;
-        setPlan((current) => current ? { ...current, posts: current.posts.map((item) => item.id === post.id ? { ...item, imageUrl: payload.imageUrl } : item) } : current);
-        try { localStorage.setItem(storageKey, JSON.stringify(stored)); } catch { /* The in-memory image remains usable if browser storage is full. */ }
+        // Ignore stale responses if the plan regenerated with a new prompt for the same post id (p1).
+        const stillCurrent = planRef.current?.posts.some((item) => item.id === post.id && postImageCacheKey(item) === promptKey);
+        if (!stillCurrent) continue;
+        stored[post.id] = { imageUrl: payload.imageUrl, promptKey };
+        matchedUrls[post.id] = payload.imageUrl;
+        setPlan((current) => current
+          ? {
+              ...current,
+              posts: current.posts.map((item) => (
+                item.id === post.id && postImageCacheKey(item) === promptKey
+                  ? { ...item, imageUrl: payload.imageUrl }
+                  : item
+              )),
+            }
+          : current);
+        writePostImageCache(dailyPlan.date, stored);
       } catch (reason) {
         const message = reason instanceof Error ? reason.message : "تولید تصویر ناموفق بود.";
-        setImageErrors((current) => ({ ...current, [post.id]: message }));
+        const stillCurrent = planRef.current?.posts.some((item) => item.id === post.id && postImageCacheKey(item) === promptKey);
+        if (stillCurrent) setImageErrors((current) => ({ ...current, [post.id]: message }));
       } finally {
-        imageRequests.current.delete(post.id);
+        imageRequests.current.delete(requestKey);
       }
     }
-    setStage("برنامه زنده امروز آماده اجراست");
+    if (planRef.current?.generatedAt === dailyPlan.generatedAt) setStage("برنامه زنده امروز آماده اجراست");
   }, []);
 
   const readPlanPayload = useCallback(async (response: Response) => {

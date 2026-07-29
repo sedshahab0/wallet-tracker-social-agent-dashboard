@@ -301,6 +301,8 @@ test("builds an evidence-bound daily manager with Firecrawl and xAI", async () =
   assert.match(page, /Firecrawl در حال بررسی X|وضعیت زنده اکانت رسمی/);
   assert.match(page, /\/api\/manager\/image/);
   assert.match(page, /\/api\/x\/verify/);
+  assert.match(page, /postImageCacheKey|wallet-social-manager-images-v2/);
+  assert.match(page, /promptKey/);
   assert.match(exampleEnv, /XAI_API_KEY=\n/);
   assert.match(exampleEnv, /XAI_TEXT_MODEL=grok-4\.5/);
   assert.match(exampleEnv, /XAI_REASONING_EFFORT=medium/);
