@@ -1,10 +1,8 @@
 import { xAccountId, xAccountUsername, xGetOwned } from "@/lib/x-api";
 
 type Mention = { id: string; text: string; author_id?: string; created_at?: string; lang?: string };
-type XUser = { id: string; name: string; username: string; profile_image_url?: string };
 type MentionEnvelope = {
   data?: Mention[];
-  includes?: { users?: XUser[] };
   meta?: { newest_id?: string; result_count?: number };
 };
 type StoredReply = {
@@ -12,7 +10,7 @@ type StoredReply = {
   risk: "green" | "yellow" | "red"; confidence: number; original: string; translation: string;
   answer: string; answerTranslation: string;
 };
-type PendingMention = Mention & { user?: XUser };
+type PendingMention = Mention;
 type InboxState = { sinceId: string; resourceReads: number; budgetAlerts: string[]; replies: StoredReply[]; pending: PendingMention[]; updatedAt: string };
 
 const memory: InboxState = { sinceId: "", resourceReads: 0, budgetAlerts: [], replies: [], pending: [], updatedAt: "" };
@@ -56,7 +54,7 @@ const replySchema = {
 async function suggestReplies(pending: PendingMention[]) {
   const apiKey = process.env.XAI_API_KEY?.trim();
   if (!apiKey) throw new Error("xAI is not configured");
-  const input = pending.map((item) => ({ tweetId: item.id, text: item.text, lang: item.lang, author: item.user?.username || "unknown" }));
+  const input = pending.map((item) => ({ tweetId: item.id, text: item.text, lang: item.lang, authorId: item.author_id || "unknown" }));
   const response = await fetch("https://api.x.ai/v1/chat/completions", {
     method: "POST",
     headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
@@ -107,12 +105,14 @@ async function notifyBudget(request: Request, label: string, resourceReads: numb
 export async function pollOwnedMentions(request: Request) {
   let state = await readXInbox();
   if (state.resourceReads >= 5_000) return { state, newReplies: 0, stopped: true, telegramNotified: false };
-  const params = new URLSearchParams({ max_results: "10", "tweet.fields": "author_id,created_at,lang", expansions: "author_id", "user.fields": "id,name,username,profile_image_url" });
+  // Keep the paid X response intentionally minimal. Author profiles and all
+  // public discovery belong to Firecrawl, so this endpoint only returns the
+  // owned mention resources required to prepare replies.
+  const params = new URLSearchParams({ max_results: "10", "tweet.fields": "author_id,created_at,lang" });
   if (state.sinceId) params.set("since_id", state.sinceId);
   const payload = await xGetOwned<MentionEnvelope>(`/2/users/${xAccountId()}/mentions?${params.toString()}`) as MentionEnvelope;
-  const users = new Map((payload.includes?.users || []).map((user) => [user.id, user]));
   const known = new Set([...state.replies.map((item) => item.id), ...state.pending.map((item) => item.id)]);
-  const fresh = (payload.data || []).filter((item) => !known.has(item.id)).map((item) => ({ ...item, user: item.author_id ? users.get(item.author_id) : undefined }));
+  const fresh = (payload.data || []).filter((item) => !known.has(item.id));
   const previousReads = state.resourceReads;
   const resourceReads = previousReads + fresh.length;
   const crossed = [[2_500, "۵۰٪ بودجه مصرف شد"], [4_000, "۸۰٪ بودجه مصرف شد"], [5_000, "سقف ۵ دلاری؛ پایش متوقف می‌شود"]] as const;
@@ -126,9 +126,8 @@ export async function pollOwnedMentions(request: Request) {
   const created = state.pending.flatMap((mention) => {
     const suggestion = byId.get(mention.id);
     if (!suggestion) return [];
-    const user = mention.user;
-    const initials = (user?.name || user?.username || "X").split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
-    return [{ id: mention.id, handle: `@${user?.username || "unknown"}`, avatar: initials, language: suggestion.language, age: "جدید", sentiment: suggestion.sentiment, risk: suggestion.risk, confidence: Math.round(suggestion.confidence), original: mention.text, translation: suggestion.translationFa, answer: suggestion.answer, answerTranslation: suggestion.answerTranslationFa } satisfies StoredReply];
+    const authorLabel = mention.author_id ? `کاربر X · ${mention.author_id.slice(-6)}` : "کاربر X";
+    return [{ id: mention.id, handle: authorLabel, avatar: "X", language: suggestion.language, age: "جدید", sentiment: suggestion.sentiment, risk: suggestion.risk, confidence: Math.round(suggestion.confidence), original: mention.text, translation: suggestion.translationFa, answer: suggestion.answer, answerTranslation: suggestion.answerTranslationFa } satisfies StoredReply];
   });
   state = { ...state, replies: [...created, ...state.replies].slice(0, 200), pending: [], updatedAt: new Date().toISOString() };
   await writeXInbox(state);

@@ -268,6 +268,7 @@ test("polls owned X mentions on the server and keeps the reply UI unchanged", as
   ]);
   assert.match(pollRoute, /SOCIAL_MANAGER_CRON_SECRET/);
   assert.match(pollRoute, /timingSafeEqual/);
+  assert.doesNotMatch(inbox, /expansions:\s*"author_id"|"user\.fields"/);
   assert.match(inboxRoute, /hasDashboardSession/);
   assert.match(inbox, /xGetOwned/);
   assert.match(inbox, /since_id/);
