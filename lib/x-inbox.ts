@@ -157,6 +157,19 @@ async function notifyBudget(request: Request, label: string, resourceReads: numb
 export async function pollOwnedMentions(request: Request) {
   let state = await readXInbox();
   if (state.resourceReads >= HARD_STOP_RESOURCE_READS) return { state, newReplies: 0, stopped: true, telegramNotified: false };
+  // Replies generated against an older project snapshot remain visible as
+  // review-only, while the next scheduled poll queues them for regeneration.
+  // Keeping the old item until replacement avoids an empty inbox if xAI or
+  // Firecrawl is temporarily unavailable.
+  const pendingIds = new Set(state.pending.map((item) => item.id));
+  const staleReplies = state.replies.filter((item) => item.contextRevision !== PROJECT_CONTEXT_REVISION && !pendingIds.has(item.id));
+  if (staleReplies.length) {
+    state = {
+      ...state,
+      pending: [...state.pending, ...staleReplies.map((item) => ({ id: item.id, text: item.original, lang: item.language }))],
+    };
+    await writeXInbox(state);
+  }
   // Keep the paid X response intentionally minimal. Author profiles and all
   // public discovery belong to Firecrawl, so this endpoint only returns the
   // owned mention resources required to prepare replies.
@@ -199,7 +212,8 @@ export async function pollOwnedMentions(request: Request) {
       liveContextUsed: suggestions.liveContextIds.has(mention.id),
     } satisfies StoredReply];
   });
-  state = { ...state, replies: [...created, ...state.replies].slice(0, 200), pending: [], updatedAt: new Date().toISOString() };
+  const createdIds = new Set(created.map((item) => item.id));
+  state = { ...state, replies: [...created, ...state.replies.filter((item) => !createdIds.has(item.id))].slice(0, 200), pending: [], updatedAt: new Date().toISOString() };
   await writeXInbox(state);
   const telegramNotified = await notifyReplies(request, created.length).catch(() => false);
   return { state, newReplies: created.length, stopped: false, telegramNotified, account: { id: xAccountId(), username: xAccountUsername() } };

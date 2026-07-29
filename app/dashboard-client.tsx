@@ -463,7 +463,8 @@ function RepliesView({ replyItems, onRepliesChange, sentIds, onMarkSent }: { rep
           <div className="answer-top"><div><span className="eyebrow">پاسخ پیشنهادی · {reply.language}</span><h3>آماده بررسی انسانی</h3></div><span className="confidence">اطمینان {reply.confidence}٪</span></div>
           <div className="answer-text" dir="auto">{reply.answer}</div>
           <div className="translation answer-translation"><span>ترجمه پاسخ</span><p dir="rtl">{reply.answerTranslation}</p></div>
-          <div className="source-strip"><span>منبع پاسخ</span><b>منشن واقعی اکانت در X</b><b>{reply.liveContextUsed ? "کانتکست عمومی گفتگو با Firecrawl" : "متن مستقیم منشن"}</b><b title={reply.groundingFacts?.join(" · ") || reply.reviewReason || "دانش تأییدشده پروژه"}>دانش پروژه · {reply.contextRevision?.slice(0, 8) || "نسخه جاری"}</b></div>
+          <div className="source-strip"><span>منبع پاسخ</span><b>منشن واقعی اکانت در X</b><b>{reply.liveContextUsed ? "کانتکست عمومی گفتگو با Firecrawl" : "متن مستقیم منشن"}</b><b title={reply.groundingFacts?.join(" · ") || reply.reviewReason || "دانش تأییدشده پروژه"}>{reply.contextRevision ? `دانش پروژه · ${reply.contextRevision.slice(0, 8)}` : "دانش قدیمی · بازتولید لازم"}</b></div>
+          {reply.reviewReason && <div className="modal-hint"><i />{reply.reviewReason}</div>}
           <div className="operator-steps" aria-label="مراحل اپراتور"><span><b>۱</b> پاسخ را کپی کن</span><span><b>۲</b> گفتگو را در X باز کن</span><span><b>۳</b> ارسال را ثبت کن</span></div>
           <div className="answer-actions">
             <button className="btn quiet" onClick={openEditor}>ویرایش پاسخ</button>
