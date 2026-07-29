@@ -77,9 +77,9 @@ const navGroups = [
     label: "کارهای اپراتور · از بالا به پایین",
     items: [
       { id: "overview" as View, icon: "⌂", label: "امروز چه‌کار کنم؟" },
-      { id: "content" as View, icon: "۱", label: "پست آماده", badge: "۷" },
-      { id: "replies" as View, icon: "۲", label: "پاسخ‌های آماده", badge: "۱۲" },
-      { id: "tasks" as View, icon: "۳", label: "لیست کار امروز", badge: "۴" },
+      { id: "content" as View, icon: "۱", label: "پست آماده" },
+      { id: "replies" as View, icon: "۲", label: "پاسخ‌های آماده" },
+      { id: "tasks" as View, icon: "۳", label: "لیست کار امروز" },
       { id: "sent" as View, icon: "✓", label: "کارهای انجام‌شده" },
     ],
   },
@@ -150,105 +150,9 @@ function viewFromPathname(pathname: string): View {
   return routeViews[normalized] || "overview";
 }
 
-const replies: ReplyItem[] = [
-  {
-    id: "r-2041",
-    handle: "@carlos_chain",
-    avatar: "CC",
-    language: "اسپانیایی",
-    age: "2m",
-    sentiment: "پرسش محصول",
-    risk: "green" as Risk,
-    confidence: 96,
-    original: "¿También puedo seguir wallets de Solana o solo funciona con Ethereum?",
-    translation: "آیا می‌توانم کیف‌پول‌های سولانا را هم دنبال کنم یا فقط اتریوم پشتیبانی می‌شود؟",
-    answer:
-      "Sí, Wallet Tracker también admite wallets de Solana. Puedes añadir una dirección y recibir alertas de nuevas transacciones desde el mismo panel.",
-    answerTranslation:
-      "بله، Wallet Tracker از کیف‌پول‌های سولانا نیز پشتیبانی می‌کند. می‌توانید آدرس را اضافه کرده و اعلان تراکنش‌های جدید را در همان پنل دریافت کنید.",
-  },
-  {
-    id: "r-2039",
-    handle: "@noor_web3",
-    avatar: "NW",
-    language: "عربی",
-    age: "7m",
-    sentiment: "بازخورد محصول",
-    risk: "green" as Risk,
-    confidence: 93,
-    original: "هل توجد تنبيهات فورية عند حدوث معاملة جديدة؟",
-    translation: "آیا هنگام انجام یک تراکنش جدید، اعلان لحظه‌ای وجود دارد؟",
-    answer:
-      "نعم، يمكنك تفعيل التنبيهات الفورية لكل محفظة تتابعها وتخصيص نوع المعاملات التي تريد أن يصلك إشعار عنها.",
-    answerTranslation:
-      "بله، می‌توانید برای هر کیف‌پولی که دنبال می‌کنید اعلان لحظه‌ای را فعال کرده و نوع تراکنش‌های موردنظر را شخصی‌سازی کنید.",
-  },
-  {
-    id: "r-2037",
-    handle: "@chainwatcher",
-    avatar: "CW",
-    language: "انگلیسی",
-    age: "11m",
-    sentiment: "پرسش امنیتی",
-    risk: "yellow" as Risk,
-    confidence: 78,
-    original: "Does the app store private keys when I add a wallet?",
-    translation: "آیا اپلیکیشن هنگام افزودن کیف‌پول، کلید خصوصی را ذخیره می‌کند؟",
-    answer:
-      "No. Wallet Tracker only needs a public wallet address for monitoring. Never share your seed phrase or private key with any tracking service.",
-    answerTranslation:
-      "خیر. Wallet Tracker فقط برای پایش به آدرس عمومی کیف‌پول نیاز دارد. عبارت بازیابی یا کلید خصوصی خود را هرگز با هیچ سرویس رهگیری به اشتراک نگذارید.",
-  },
-];
+const replies: ReplyItem[] = [];
 
-const contentItems: ContentItem[] = [
-  {
-    id: "p-301",
-    type: "به‌روزرسانی محصول",
-    title: "رهگیری کیف‌پول‌های سولانا فعال شد",
-    body: "آدرس‌های سولانا را در کنار کیف‌پول‌های EVM دنبال کنید و برای تراکنش‌های جدید اعلان بگیرید.",
-    language: "انگلیسی",
-    risk: "green" as Risk,
-    time: "امروز · ۱۸:۳۰",
-    source: "نسخه GitLab و مستندات محصول",
-    postText: "Solana wallet tracking is now live in Wallet Tracker. Monitor Solana and EVM addresses side by side, and get notified when new transactions happen. Add your first Solana address from the dashboard.",
-  },
-  {
-    id: "p-300",
-    type: "رشته‌پست آموزشی",
-    title: "۵ نشانه مهم برای بررسی یک کیف‌پول",
-    body: "راهنمایی کاربردی درباره انتقال‌های بزرگ، فعالیت کیف‌پول‌های غیرفعال و تمرکز توکن؛ بدون تبدیل داده به توصیه مالی.",
-    language: "انگلیسی",
-    risk: "green" as Risk,
-    time: "فردا · ۱۱:۰۰",
-    source: "پایگاه دانش تأییدشده",
-    postText: "5 wallet signals worth watching — without turning data into financial advice:\n\n1. Large transfers\n2. Dormant wallet activity\n3. Token concentration\n4. Repeated counterparties\n5. Sudden balance changes\n\nWallet Tracker keeps these signals in one clear timeline.",
-  },
-  {
-    id: "p-299",
-    type: "سیگنال بازار",
-    title: "یک انتقال باارزش در شبکه اتریوم شناسایی شد",
-    body: "یک کیف‌پول عمومی دارایی قابل‌توجهی منتقل کرده است. مبلغ و مقصد هنوز به بررسی با منبع دوم نیاز دارد.",
-    language: "انگلیسی",
-    risk: "yellow" as Risk,
-    time: "منتظر بررسی",
-    source: "Wallet Stats و بررسی RPC",
-    postText: "A notable public-wallet transfer was detected on Ethereum. The amount and destination are still being verified against a second source. We will only publish confirmed details.",
-  },
-];
-
-const telegramAlerts = [
-  { id: "t-1", icon: "✦", tone: "ready", title: "پست جدید آماده انتشار است", body: "پست «رهگیری کیف‌پول‌های سولانا» بررسی شده؛ متن را از داشبورد کپی کنید.", time: "۲ دقیقه پیش", cta: "دیدن پست", target: "content" as View },
-  { id: "t-2", icon: "↩", tone: "ready", title: "پاسخ اسپانیایی آماده است", body: "@carlos_chain درباره پشتیبانی سولانا پرسیده است. پاسخ هم‌زبان با ریسک پایین آماده شد.", time: "۷ دقیقه پیش", cta: "دیدن پاسخ", target: "replies" as View },
-  { id: "t-3", icon: "!", tone: "danger", title: "ارجاع امنیتی به مدیر", body: "یک پیام شامل درخواست کلید خصوصی شناسایی شد؛ انتشار خودکار پاسخ مسدود است.", time: "۱۲ دقیقه پیش", cta: "بررسی فوری", target: "replies" as View },
-  { id: "t-4", icon: "$", tone: "warning", title: "محافظ اعتبار X فعال است", body: "۵ دلار فقط برای خواندن منشن‌های جدید رزرو شده و در ۵۰٪ و ۸۰٪ هشدار می‌گیرید.", time: "امروز", cta: "دیدن اعتبار", target: "budget" as View },
-];
-
-const defaultResearchItems: ResearchItem[] = [
-  { id: "research-security", score: 92, title: "پرسش‌های امنیت کیف‌پول در حال افزایش است", meta: "۱۸ پست X · ۷ منبع · انگلیسی و اسپانیایی", tag: "فرصت محتوایی", evidence: ["۷ منبع عمومی مستقل بررسی شده‌اند.", "پرسش‌های پرتکرار درباره کلید خصوصی و عبارت بازیابی بوده‌اند.", "پیشنهاد: یک رشته‌پست آموزشی بدون توصیه مالی آماده شود."] },
-  { id: "research-solana", score: 86, title: "اعتمادپذیری اعلان‌های سولانا یک دغدغه پرتکرار است", meta: "۱۱ گفتگو · ۵ منبع · ۱۲ ساعت", tag: "آموزش محصول", evidence: ["۱۱ گفتگو در بازه ۱۲ ساعته دسته‌بندی شده‌اند.", "بیشترین ابهام مربوط به زمان دریافت اعلان است.", "پیشنهاد: تفاوت تأیید شبکه و اعلان اپلیکیشن توضیح داده شود."] },
-  { id: "research-base", score: 74, title: "یکی از رقبا پشتیبانی از Base را اضافه کرد", meta: "نسخه تأیید شد · ۳ منشن پشتیبان", tag: "سیگنال رقابتی", evidence: ["صفحه رسمی محصول و یادداشت نسخه با یکدیگر تطبیق داده شدند.", "سه گفتگوی عمومی قابلیت جدید را تأیید می‌کنند.", "این سیگنال پیش از ورود به صف محتوا به بررسی محصول نیاز دارد."] },
-];
+const contentItems: ContentItem[] = [];
 
 function useStoredIds(key: string) {
   const [ids, setIds] = useState<string[]>([]);
@@ -512,7 +416,7 @@ function RepliesView({ replyItems, onRepliesChange, sentIds, onMarkSent }: { rep
           <div className="answer-top"><div><span className="eyebrow">پاسخ پیشنهادی · {reply.language}</span><h3>آماده بررسی انسانی</h3></div><span className="confidence">اطمینان {reply.confidence}٪</span></div>
           <div className="answer-text" dir="auto">{reply.answer}</div>
           <div className="translation answer-translation"><span>ترجمه پاسخ</span><p dir="rtl">{reply.answerTranslation}</p></div>
-          <div className="source-strip"><span>منابع</span><b>پایگاه دانش محصول</b><b>قوانین پشتیبانی نسخه ۱٫۳</b></div>
+          <div className="source-strip"><span>منبع ورودی</span><b>منشن واقعی اکانت در X</b><b>پاسخ پیشنهادی مدیر هوشمند</b></div>
           <div className="operator-steps" aria-label="مراحل اپراتور"><span><b>۱</b> پاسخ را کپی کن</span><span><b>۲</b> گفتگو را در X باز کن</span><span><b>۳</b> ارسال را ثبت کن</span></div>
           <div className="answer-actions">
             <button className="btn quiet" onClick={openEditor}>ویرایش پاسخ</button>
@@ -584,7 +488,7 @@ function ContentView({ content, onContentChange, sentIds, onMarkSent }: { conten
           </article>;
         })}
       </div>
-      {visibleItems.length === 0 && <div className="panel empty-state"><strong>موردی با این فیلتر پیدا نشد.</strong><p>فیلتر وضعیت یا ریسک را تغییر دهید.</p></div>}
+      {visibleItems.length === 0 && <div className="panel empty-state"><strong>{content.length ? "موردی با این فیلتر پیدا نشد." : "هنوز محتوای واقعی آماده نشده است."}</strong><p>{content.length ? "فیلتر وضعیت یا ریسک را تغییر دهید." : "پس از تکمیل برنامه زنده و تأیید منابع، پست واقعی اینجا ظاهر می‌شود."}</p></div>}
       {toast && <div className="toast">✓ {toast}</div>}
       {editorOpen && <ModalShell title={draft.id ? "ویرایش پیش‌نویس" : "ساخت پیش‌نویس جدید"} eyebrow="صف محتوا" onClose={() => setEditorOpen(false)} footer={<><button className="btn quiet" type="button" onClick={() => setEditorOpen(false)}>انصراف</button><button className="btn accent" type="submit" form="content-editor-form" disabled={!draft.title.trim() || !draft.postText.trim() || draft.postText.length > 280}>{draft.id ? "ذخیره تغییرات" : "افزودن به صف"}</button></>}><form id="content-editor-form" className="modal-form" onSubmit={saveContent}><div className="form-grid"><label>نوع محتوا<input value={draft.type} onChange={(event) => setDraft({ ...draft, type: event.target.value })} /></label><label>زبان<select value={draft.language} onChange={(event) => setDraft({ ...draft, language: event.target.value })}><option>انگلیسی</option><option>فارسی</option><option>اسپانیایی</option><option>عربی</option></select></label><label className="full-row">عنوان داخلی<input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} autoFocus /></label><label className="full-row">خلاصه برای اپراتور<textarea value={draft.body} onChange={(event) => setDraft({ ...draft, body: event.target.value })} rows={3} /></label><label>زمان انتشار<input value={draft.time} onChange={(event) => setDraft({ ...draft, time: event.target.value })} /></label><label>سطح ریسک<select value={draft.risk} onChange={(event) => setDraft({ ...draft, risk: event.target.value as Risk })}><option value="green">کم‌ریسک</option><option value="yellow">نیازمند بررسی</option><option value="red">ارجاع فوری</option></select></label><label className="full-row">منبع<input value={draft.source} onChange={(event) => setDraft({ ...draft, source: event.target.value })} /></label><label className="full-row">متن نهایی برای X<textarea value={draft.postText} onChange={(event) => setDraft({ ...draft, postText: event.target.value })} dir="auto" rows={6} /></label></div><div className={`character-count ${draft.postText.length > 280 ? "over" : ""}`}><span>{draft.postText.length.toLocaleString("fa-IR")} / ۲۸۰ نویسه</span><small>{draft.postText.length > 280 ? "متن باید کوتاه‌تر شود." : "قبل از انتشار، متن توسط اپراتور بررسی می‌شود."}</small></div></form></ModalShell>}
     </section>
@@ -609,7 +513,7 @@ function SentView({ replyIds, postIds, replyItems, content }: { replyIds: string
   </section>;
 }
 
-function TelegramView({ onNavigate }: { onNavigate: (view: View) => void }) {
+function TelegramView() {
   const notificationRules = [
     ["پست یا پاسخ آماده", "فوری", true],
     ["ارجاع امنیتی، حقوقی یا مالی", "فوری و سنجاق‌شده", true],
@@ -682,8 +586,8 @@ function TelegramView({ onNavigate }: { onNavigate: (view: View) => void }) {
     </article>
 
     <article className="panel telegram-feed">
-      <div className="panel-head"><div><span className="eyebrow">پیش‌نمایش گروه</span><h3>اعلان‌های اخیر</h3></div><span className="live-pill"><i/> ۳ خوانده‌نشده</span></div>
-      <div className="telegram-messages">{telegramAlerts.map((alert) => <div className={`telegram-message ${alert.tone}`} key={alert.id}><span className="alert-icon">{alert.icon}</span><div><strong>{alert.title}</strong><p>{alert.body}</p><small>{alert.time}</small></div><button className="btn quiet" onClick={() => onNavigate(alert.target)}>{alert.cta} ←</button></div>)}</div>
+      <div className="panel-head"><div><span className="eyebrow">رویدادهای واقعی</span><h3>اعلان‌های اخیر</h3></div></div>
+      <div className="telegram-messages"><div className="empty-state"><strong>هنوز اعلان واقعی ثبت نشده است.</strong><p>پس از آماده‌شدن پست، دریافت کامنت، هشدار بودجه یا پایان پژوهش، اعلان این بخش از رویداد واقعی ساخته می‌شود.</p></div></div>
     </article>
 
     <article className="panel notification-rules">
@@ -694,7 +598,7 @@ function TelegramView({ onNavigate }: { onNavigate: (view: View) => void }) {
 }
 
 function ResearchView() {
-  const [researchItems, setResearchItems] = useState<ResearchItem[]>(defaultResearchItems);
+  const [researchItems, setResearchItems] = useState<ResearchItem[]>([]);
   const [researchReady, setResearchReady] = useState(false);
   const [researchOpen, setResearchOpen] = useState(false);
   const [selectedEvidence, setSelectedEvidence] = useState<ResearchItem | null>(null);
@@ -712,17 +616,17 @@ function ResearchView() {
   useEffect(() => {
     const hydrationTimer = window.setTimeout(() => {
       try {
-        const stored = JSON.parse(window.localStorage.getItem("wallet-social-research-results") || "null");
+        const stored = JSON.parse(window.localStorage.getItem("wallet-social-research-results-live-v2") || "null");
         if (Array.isArray(stored) && stored.length) setResearchItems(stored);
       } catch {
-        setResearchItems(defaultResearchItems);
+        setResearchItems([]);
       }
       setResearchReady(true);
     }, 0);
     return () => window.clearTimeout(hydrationTimer);
   }, []);
   useEffect(() => {
-    if (researchReady) window.localStorage.setItem("wallet-social-research-results", JSON.stringify(researchItems));
+    if (researchReady) window.localStorage.setItem("wallet-social-research-results-live-v2", JSON.stringify(researchItems));
   }, [researchItems, researchReady]);
 
   const openResearch = () => {
@@ -782,6 +686,7 @@ function ResearchView() {
     <section className="research-grid">
       <article className="panel research-hero"><span className="eyebrow">بررسی انتخابی</span><h2>Firecrawl فقط وقتی اجرا می‌شود که کانتکست ارزش هزینه را داشته باشد.</h2><p>پس از شروع، وضعیت پژوهش مرحله‌به‌مرحله نمایش داده می‌شود؛ نتیجه همراه منابع در همین صفحه می‌ماند و پایان کار در تلگرام اعلام می‌شود.</p><button className="btn accent" onClick={openResearch}>اجرای پژوهش هدفمند</button></article>
       {researchItems.map((item) => <article className="panel research-card" key={item.id}><div className="score">{item.score}</div><div><span>{item.tag}</span><h3>{item.title}</h3><p>{item.meta}</p></div><button className="text-btn" onClick={() => setSelectedEvidence(item)}>بررسی شواهد ←</button></article>)}
+      {researchItems.length === 0 && <article className="panel empty-state"><strong>هنوز پژوهش واقعی اجرا نشده است.</strong><p>با «اجرای پژوهش هدفمند» یک موضوع واقعی را برای Firecrawl بفرستید؛ نتیجه و منابع همین‌جا ثبت می‌شوند.</p></article>}
       {toast && <div className="toast">✓ {toast}</div>}
       {researchOpen && <ModalShell title={runState === "success" ? "پژوهش با موفقیت تکمیل شد" : runState === "error" ? "پژوهش تکمیل نشد" : running ? "پژوهش زنده در حال اجراست" : "پژوهش هدفمند جدید"} eyebrow="Firecrawl انتخابی" onClose={closeResearch} closeDisabled={running} footer={modalFooter}>
         {runState === "idle" && <form id="research-request-form" className="modal-form" onSubmit={runResearch}><label>موضوع یا پرسش پژوهش<textarea rows={4} value={topic} onChange={(event) => setTopic(event.target.value)} placeholder="مثلاً دغدغه‌های کاربران درباره امنیت کیف‌پول چیست؟" autoFocus maxLength={500} /></label><label>دامنه منابع<select value={sourceScope} onChange={(event) => setSourceScope(event.target.value)}><option>منابع رسمی و گفتگوهای عمومی X</option><option>فقط مستندات رسمی</option><option>منابع رسمی و وب‌سایت رقبا</option></select></label><div className="character-count"><span>{topic.trim().length.toLocaleString("fa-IR")} / ۵۰۰ نویسه</span><small>{topic.trim().length > 0 && topic.trim().length < 8 ? "پرسش را کمی دقیق‌تر بنویسید." : "پژوهش فقط با تأیید شما اجرا می‌شود."}</small></div><div className="modal-hint"><i /> نتیجه مستقیماً منتشر نمی‌شود؛ ابتدا شواهد برای بررسی انسانی در داشبورد ذخیره می‌شوند.</div></form>}
@@ -794,92 +699,74 @@ function ResearchView() {
   );
 }
 
-const strategyDays = [
-  { day: "شنبه", date: "۱۰ مرداد", slots: [{ time: "۱۱:۳۰", type: "آموزشی", title: "۵ نشانه مهم برای بررسی یک کیف‌پول", state: "آماده" }, { time: "۱۹:۰۰", type: "تعامل", title: "پاسخ به گفتگوی امنیت کلید خصوصی", state: "نیازمند انتخاب پست" }] },
-  { day: "یکشنبه", date: "۱۱ مرداد", slots: [{ time: "۱۸:۳۰", type: "محصول", title: "رصد هم‌زمان آدرس‌های Solana و EVM", state: "آماده" }] },
-  { day: "دوشنبه", date: "۱۲ مرداد", slots: [{ time: "—", type: "توقف هوشمند", title: "انتشار تازه متوقف؛ فقط پاسخ به کاربران", state: "حفظ کیفیت" }] },
-  { day: "سه‌شنبه", date: "۱۳ مرداد", slots: [{ time: "۱۲:۰۰", type: "خبر", title: "خلاصه خبر تأییدشده آن‌چین", state: "منتظر منبع" }, { time: "۲۰:۳۰", type: "برند", title: "چرا سرعت هشدار برای معامله‌گر مهم است؟", state: "پیش‌نویس" }] },
-  { day: "چهارشنبه", date: "۱۴ مرداد", slots: [{ time: "۱۸:۰۰", type: "اعتمادسازی", title: "Wallet Tracker چه داده‌ای ذخیره نمی‌کند؟", state: "بازبینی محصول" }] },
-  { day: "پنجشنبه", date: "۱۵ مرداد", slots: [{ time: "۱۷:۳۰", type: "تعامل", title: "سه گفتگوی هدفمند با متخصصان آن‌چین", state: "برنامه‌ریزی‌شده" }] },
-  { day: "جمعه", date: "۱۶ مرداد", slots: [{ time: "—", type: "تحلیل", title: "مرور عملکرد هفته و یادگیری الگوریتم", state: "بدون انتشار" }] },
-];
-
-function StrategyView({ onNavigate }: { onNavigate: (view: View) => void }) {
-  const [week, setWeek] = useState(1);
-  const themes = ["اعتماد و امنیت", "آموزش محصول", "کاربردهای واقعی", "اثبات و بازخورد"];
+function StrategyView({ onNavigate, plan }: { onNavigate: (view: View) => void; plan: DailyManagerPlan | null }) {
+  if (!plan) return <section className="strategy-view"><article className="panel empty-state"><strong>برنامه واقعی هنوز ساخته نشده است.</strong><p>مدیر هوشمند پس از دریافت داده زنده Firecrawl، برنامه روز را تولید می‌کند. تا آن زمان هیچ زمان، هدف یا پیشنهاد ساختگی نمایش داده نمی‌شود.</p><button className="btn accent" onClick={() => onNavigate("research")}>بررسی منابع زنده ←</button></article></section>;
+  const scheduledItems = [
+    ...plan.posts.map((post) => ({ id: `post-${post.id}`, time: post.time, type: "انتشار", title: post.title, detail: post.summaryFa })),
+    ...plan.interactions.map((item) => ({ id: `interaction-${item.id}`, time: "امروز", type: "تعامل", title: item.account, detail: item.reason })),
+  ];
   return <section className="strategy-view">
-    <div className="strategy-hero panel lift-card"><div><span className="eyebrow">هدف ماهانه · مرداد</span><h2>تبدیل Wallet Tracker به مرجع قابل اعتماد هشدارهای آن‌چین</h2><p>تمرکز روی بازدید باکیفیت پروفایل، فالوهای مرتبط، کلیک وب‌سایت و گفتگوهای واقعی است؛ نه صرفاً تعداد پست.</p></div><div className="strategy-score"><span>امتیاز آمادگی</span><strong>۸۴</strong><small>از ۱۰۰ · نیازمند اعتبار X API</small></div></div>
+    <div className="strategy-hero panel lift-card"><div><span className="eyebrow">برنامه زنده · {plan.date}</span><h2>{plan.todayGoal}</h2><p>{plan.rationale}</p></div><div className="strategy-score"><span>وضعیت داده</span><strong>زنده</strong><small>بر پایه منابع ثبت‌شده امروز</small></div></div>
     <div className="strategy-kpis">
-      {[['هدف انتشار','۵ پست باکیفیت در هفته','کیفیت پیش از حجم'],['هدف تعامل','۱۸ گفتگوی مرتبط','بدون متن تکراری'],['قاعده تصویر','۱۰۰٪ پست‌های اصلی','تصویر اختصاصی ۱۶:۹'],['چرخه یادگیری','هر جمعه ساعت ۱۷','بازچینی هفته بعد']].map((item) => <article className="panel lift-card" key={item[0]}><span>{item[0]}</span><strong>{item[1]}</strong><small>{item[2]}</small></article>)}
+      <article className="panel lift-card"><span>پست آماده</span><strong>{plan.posts.length.toLocaleString("fa-IR")}</strong><small>دارای متن و منبع</small></article>
+      <article className="panel lift-card"><span>تعامل هدفمند</span><strong>{plan.interactions.length.toLocaleString("fa-IR")}</strong><small>دارای لینک واقعی X</small></article>
+      <article className="panel lift-card"><span>کار امروز</span><strong>{plan.tasks.length.toLocaleString("fa-IR")}</strong><small>دستور دقیق اپراتور</small></article>
+      <article className="panel lift-card"><span>سیگنال زنده</span><strong>{plan.signals.length.toLocaleString("fa-IR")}</strong><small>استخراج‌شده از منابع واقعی</small></article>
     </div>
-    <article className="panel strategy-calendar">
-      <div className="panel-head"><div><span className="eyebrow">تقویم اجرایی</span><h3>هفته {week.toLocaleString('fa-IR')} · {themes[week - 1]}</h3><p>ساعت‌ها فرضیه اولیه‌اند و پس از ۱۴ روز با داده واقعی بازچینی می‌شوند.</p></div><div className="week-tabs">{themes.map((theme, index) => <button className={week === index + 1 ? 'active' : ''} onClick={() => setWeek(index + 1)} key={theme}>هفته {(index + 1).toLocaleString('fa-IR')}</button>)}</div></div>
-      <div className="calendar-grid">{strategyDays.map((entry) => <div className="calendar-day lift-card" key={entry.day}><header><strong>{entry.day}</strong><small>{entry.date}</small></header>{entry.slots.map((slot) => <div className={`calendar-slot ${slot.type.includes('توقف') || slot.type === 'تحلیل' ? 'pause' : ''}`} key={`${slot.time}-${slot.title}`}><span>{slot.time}</span><b>{slot.type}</b><p>{slot.title}</p><small>{slot.state}</small></div>)}</div>)}</div>
+    <article className="panel strategy-calendar"><div className="panel-head"><div><span className="eyebrow">تقویم اجرایی امروز</span><h3>موارد تولیدشده توسط مدیر هوشمند</h3><p>فقط زمان‌ها و اقدام‌هایی نمایش داده می‌شوند که در برنامه واقعی امروز وجود دارند.</p></div></div>
+      {scheduledItems.length ? <div className="calendar-grid">{scheduledItems.map((item) => <div className="calendar-day lift-card" key={item.id}><header><strong>{item.type}</strong><small>{item.time}</small></header><div className="calendar-slot"><b>{item.title}</b><p>{item.detail}</p></div></div>)}</div> : <div className="empty-state"><strong>برای امروز اسلاتی ثبت نشده است.</strong><p>این توقف بخشی از خروجی واقعی برنامه امروز است.</p></div>}
     </article>
-    <div className="logic-grid">
-      <article className="panel lift-card"><span className="eyebrow">موتور تصمیم</span><h3>هر پیشنهاد چگونه امتیاز می‌گیرد؟</h3><div className="formula" dir="ltr">Audience activity × Freshness × Quality × Format fit × Risk gate</div><p>اگر تازگی خبر، کیفیت منبع یا تناسب با برند پایین باشد، اسلات حذف یا به روز دیگری منتقل می‌شود.</p></article>
-      <article className="panel lift-card"><span className="eyebrow">توقف هوشمند</span><h3>چه زمانی نباید پست بگذاریم؟</h3><ul><li>ادعای خبری هنوز با منبع دوم تأیید نشده است.</li><li>شباهت متن با محتوای اخیر از ۷۲٪ بیشتر است.</li><li>ریسک حساب یا خطای API فعال است.</li><li>رویداد حساس جهانی، لحن تبلیغاتی را نامناسب می‌کند.</li></ul></article>
-      <article className="panel lift-card action-panel"><span className="eyebrow">قدم بعد اپراتور</span><h3>برنامه امروز آماده اجراست</h3><p>شش کار دقیق، متن‌های قابل کپی و نقاط کنترل انسانی ساخته شده‌اند.</p><button className="btn accent" onClick={() => onNavigate('tasks')}>شروع کارهای امروز ←</button></article>
-    </div>
+    <div className="logic-grid"><article className="panel lift-card"><span className="eyebrow">منطق تصمیم امروز</span><h3>چرا این برنامه ساخته شد؟</h3><p>{plan.rationale}</p></article><article className="panel lift-card action-panel"><span className="eyebrow">قدم بعد اپراتور</span><h3>کارهای واقعی امروز را اجرا کن</h3><p>هر ردیف زمان، متن و مقصد دقیق دارد.</p><button className="btn accent" onClick={() => onNavigate("tasks")}>شروع کارهای امروز ←</button></article></div>
   </section>;
 }
 
-const dailyTaskSeed = [
-  { id: 'publish-post', time: '۱۱:۳۰', title: 'پست آماده را منتشر کن', detail: 'دکمه «رفتن به بخش» را بزن، متن و تصویر را کپی کن، در X منتشر کن و بعد «منتشر کردم» را بزن.', target: 'content' as View, priority: 'مرحله ۱' },
-  { id: 'reply-users', time: '۱۴:۰۰', title: 'به پاسخ‌های سبز جواب بده', detail: 'پاسخ سبز را کپی و زیر همان کامنت بگذار. پاسخ زرد را ارسال نکن و به مدیر نشان بده.', target: 'replies' as View, priority: 'مرحله ۲' },
-  { id: 'check-again', time: '۱۸:۰۰', title: 'صندوق پاسخ‌ها را دوباره ببین', detail: 'اگر مورد تازه‌ای آمده بود همان کار مرحله قبل را تکرار کن؛ اگر خالی بود کاری لازم نیست.', target: 'replies' as View, priority: 'مرحله ۳' },
-  { id: 'daily-review', time: '۲۱:۳۰', title: 'مطمئن شو همه کارها ثبت شده‌اند', detail: 'صفحه کارهای انجام‌شده را باز کن و مطمئن شو پست و پاسخ‌هایی که فرستادی در لیست هستند.', target: 'sent' as View, priority: 'پایان روز' },
-];
 
 function TasksView({ onNavigate, plan }: { onNavigate: (view: View) => void; plan: DailyManagerPlan | null }) {
   const [done, setDone] = useState<string[]>([]);
   useEffect(() => {
     const hydrationTimer = window.setTimeout(() => {
-      try { setDone(JSON.parse(localStorage.getItem('wallet-social-daily-tasks') || '[]')); } catch { setDone([]); }
+      try { setDone(JSON.parse(localStorage.getItem('wallet-social-daily-tasks-live-v2') || '[]')); } catch { setDone([]); }
     }, 0);
     return () => window.clearTimeout(hydrationTimer);
   }, []);
-  useEffect(() => { localStorage.setItem('wallet-social-daily-tasks', JSON.stringify(done)); }, [done]);
-  const tasks = plan?.tasks.length ? plan.tasks.map((task) => ({ id: task.id, time: task.time, title: task.title, detail: task.instruction, target: task.kind === "publish" ? "content" as View : task.kind === "reply" ? "replies" as View : task.kind === "interact" ? "growth" as View : task.kind === "research" ? "research" as View : "sent" as View, priority: task.priority === "now" ? "الان" : task.priority === "today" ? "امروز" : "اختیاری" })) : dailyTaskSeed;
-  const percent = Math.round((done.filter((id) => tasks.some((task) => task.id === id)).length / tasks.length) * 100);
+  useEffect(() => { localStorage.setItem('wallet-social-daily-tasks-live-v2', JSON.stringify(done)); }, [done]);
+  const tasks = plan?.tasks.map((task) => ({ id: task.id, time: task.time, title: task.title, detail: task.instruction, target: task.kind === "publish" ? "content" as View : task.kind === "reply" ? "replies" as View : task.kind === "interact" ? "growth" as View : task.kind === "research" ? "research" as View : "sent" as View, priority: task.priority === "now" ? "الان" : task.priority === "today" ? "امروز" : "اختیاری" })) || [];
+  const percent = tasks.length ? Math.round((done.filter((id) => tasks.some((task) => task.id === id)).length / tasks.length) * 100) : 0;
   return <section className="tasks-view">
-    <div className="tasks-summary panel"><div><span className="eyebrow">{plan ? "برنامه زنده امروز" : "برنامه موقت اپراتور"}</span><h2>{done.filter((id) => tasks.some((task) => task.id === id)).length === tasks.length ? 'همه کارهای امروز انجام شد' : `${(tasks.length - done.filter((id) => tasks.some((task) => task.id === id)).length).toLocaleString('fa-IR')} کار تا پایان برنامه امروز`}</h2><p>{plan?.todayGoal || "هر ردیف دقیقاً می‌گوید چه کاری، در چه زمانی و در کدام بخش انجام شود."}</p></div><div className="daily-progress"><strong>{percent.toLocaleString('fa-IR')}٪</strong><span><i style={{width:`${percent}%`}}/></span><small>{done.filter((id) => tasks.some((task) => task.id === id)).length.toLocaleString('fa-IR')} از {tasks.length.toLocaleString('fa-IR')} تکمیل‌شده</small></div></div>
+    <div className="tasks-summary panel"><div><span className="eyebrow">{plan ? "برنامه زنده امروز" : "در انتظار داده زنده"}</span><h2>{tasks.length === 0 ? "هنوز کاری برای امروز ساخته نشده است" : done.filter((id) => tasks.some((task) => task.id === id)).length === tasks.length ? 'همه کارهای امروز انجام شد' : `${(tasks.length - done.filter((id) => tasks.some((task) => task.id === id)).length).toLocaleString('fa-IR')} کار تا پایان برنامه امروز`}</h2><p>{plan?.todayGoal || "پس از تکمیل برنامه زنده، دستورهای واقعی اپراتور اینجا ظاهر می‌شوند."}</p></div><div className="daily-progress"><strong>{percent.toLocaleString('fa-IR')}٪</strong><span><i style={{width:`${percent}%`}}/></span><small>{done.filter((id) => tasks.some((task) => task.id === id)).length.toLocaleString('fa-IR')} از {tasks.length.toLocaleString('fa-IR')} تکمیل‌شده</small></div></div>
     <div className="task-list">{tasks.map((task, index) => { const checked = done.includes(task.id); return <article className={`panel task-row lift-card ${checked ? 'completed' : ''}`} key={task.id}><button className="task-check" onClick={() => setDone((current) => checked ? current.filter((id) => id !== task.id) : [...current, task.id])} aria-label={checked ? 'بازگرداندن کار' : 'علامت‌گذاری انجام شد'}>{checked ? '✓' : (index + 1).toLocaleString('fa-IR')}</button><time>{task.time}</time><div><span>{task.priority}</span><h3>{task.title}</h3><p>{task.detail}</p></div><button className="btn quiet" onClick={() => onNavigate(task.target)}>رفتن به بخش ←</button></article>; })}</div>
+    {tasks.length === 0 && <article className="panel empty-state"><strong>هیچ وظیفه آزمایشی نمایش داده نمی‌شود.</strong><p>در اولین اجرای موفق مدیر هوشمند، لیست واقعی امروز جایگزین این پیام می‌شود.</p></article>}
   </section>;
 }
 
-function CreativeView({ onNavigate }: { onNavigate: (view: View) => void }) {
+
+function CreativeView({ onNavigate, plan }: { onNavigate: (view: View) => void; plan: DailyManagerPlan | null }) {
   const [open, setOpen] = useState(false);
-  const [topic, setTopic] = useState('امنیت کیف‌پول و هشدار تراکنش‌های مشکوک');
-  const [language, setLanguage] = useState('انگلیسی');
-  const [state, setState] = useState<'idle'|'running'|'success'|'error'>('idle');
-  const [message, setMessage] = useState('');
-  const run = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); setState('running'); setMessage(''); try { const response = await fetch('/api/research', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({ topic, scope:'منابع رسمی پروژه، مستندات بلاکچین و منابع خبری معتبر' }) }); const data = await response.json() as {ok?:boolean; result?:ResearchItem; error?:string}; if (!response.ok || !data.ok || !data.result) throw new Error(data.error || 'ساخت بسته ناموفق بود.'); localStorage.setItem('wallet-social-last-creative-brief', JSON.stringify({ topic, language, source:data.result, createdAt:new Date().toISOString() })); setState('success'); setMessage('منابع زنده بررسی و بسته متن و تصویر برای بازبینی انسانی آماده شد.'); } catch (error) { setState('error'); setMessage(error instanceof Error ? error.message : 'ساخت بسته ناموفق بود.'); } };
+  const [topic, setTopic] = useState("");
+  const [language, setLanguage] = useState("انگلیسی");
+  const [state, setState] = useState<"idle"|"running"|"success"|"error">("idle");
+  const [message, setMessage] = useState("");
+  const run = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); setState("running"); setMessage(""); try { const response = await fetch("/api/research", { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({ topic, scope:"منابع رسمی پروژه، مستندات بلاکچین و منابع خبری معتبر" }) }); const data = await response.json() as {ok?:boolean; result?:ResearchItem; error?:string}; if (!response.ok || !data.ok || !data.result) throw new Error(data.error || "ساخت بسته ناموفق بود."); localStorage.setItem("wallet-social-last-creative-brief-live-v2", JSON.stringify({ topic, language, source:data.result, createdAt:new Date().toISOString() })); setState("success"); setMessage("منابع واقعی بررسی شدند. خروجی در پژوهش زنده ثبت شد و مدیر هوشمند در اجرای بعدی از آن استفاده می‌کند."); } catch (error) { setState("error"); setMessage(error instanceof Error ? error.message : "ساخت بسته ناموفق بود."); } };
+  const posts = plan?.posts || [];
   return <section className="creative-view">
-    <div className="creative-hero panel lift-card"><div><span className="eyebrow">بسته کامل انتشار</span><h2>هر ایده به متن، ترجمه و تصویر اختصاصی تبدیل می‌شود.</h2><p>خروجی مستقیماً منتشر نمی‌شود؛ منبع، ادعا، لحن و تصویر ابتدا به اپراتور نشان داده می‌شوند.</p><button className="btn accent" onClick={() => { setState('idle'); setOpen(true); }}>ساخت بسته محتوای جدید ✦</button></div><div className="creative-pipeline">{['سیگنال زنده','راستی‌آزمایی','متن و ترجمه','پرامپت تصویر','تأیید انسانی'].map((step,index) => <div key={step}><span>{(index+1).toLocaleString('fa-IR')}</span><b>{step}</b></div>)}</div></div>
-    <div className="creative-grid">
-      <article className="panel content-package lift-card"><header><span className="risk-badge green"><i/> کم‌ریسک</span><b>آموزش امنیت</b></header><h3>Alerts should explain risk — not create panic.</h3><p dir="ltr">A wallet alert is useful only when it gives you context: what moved, where it went, and why the transaction may matter. Wallet Tracker helps you follow the signal without exposing private keys.</p><div className="image-brief"><span className="image-orbit">WT</span><div><small>تصویر اختصاصی پیشنهادی · ۱۶:۹</small><strong>رادار نارنجی روی شبکه آن‌چین، کیف‌پول امن و مسیر تراکنش؛ بدون متن ریز</strong></div></div><footer><span>امروز · ۱۱:۳۰</span><button className="btn quiet" onClick={() => navigator.clipboard.writeText('A premium cinematic orange-on-black on-chain security radar visual, wallet transaction path, no tiny text, 16:9')}>کپی پرامپت تصویر</button><button className="btn accent" onClick={() => onNavigate('content')}>بازبینی در صف محتوا</button></footer></article>
-      <article className="panel content-package lift-card"><header><span className="risk-badge yellow"><i/> نیازمند منبع</span><b>خبر و تحلیل</b></header><h3>خبر زنده، فقط پس از تأیید دو منبع</h3><p>عامل خبر را خلاصه، ادعاهای حساس را علامت‌گذاری و نسخه انگلیسی و فارسی را کنار هم آماده می‌کند. انتشار تا تأیید اپراتور قفل می‌ماند.</p><div className="image-brief pending"><span>◇</span><div><small>تصویر پس از تثبیت تیتر ساخته می‌شود</small><strong>سبک بصری برند، تیتر کوتاه و سوژه مرتبط با شبکه خبر</strong></div></div><footer><span>اسلات ذخیره · ۱۸:۳۰</span><button className="btn quiet" onClick={() => setOpen(true)}>تکمیل با پژوهش زنده</button></footer></article>
-    </div>
-    {open && <ModalShell title="ساخت بسته محتوای هوشمند" eyebrow="Firecrawl + موتور تدوین" onClose={() => state !== 'running' && setOpen(false)} closeDisabled={state === 'running'} footer={state === 'success' ? <><button className="btn quiet" onClick={() => setOpen(false)}>بستن</button><button className="btn accent" onClick={() => { setOpen(false); onNavigate('content'); }}>انتقال به صف محتوا</button></> : <><button className="btn quiet" onClick={() => setOpen(false)} disabled={state==='running'}>انصراف</button><button className="btn accent" type="submit" form="creative-form" disabled={state==='running' || topic.length < 8}>{state==='running' ? 'در حال بررسی منابع…' : 'ساخت بسته'}</button></>}><form id="creative-form" className="creative-form" onSubmit={run}><label>موضوع یا خبر<textarea value={topic} onChange={(event) => setTopic(event.target.value)} /></label><label>زبان اصلی<select value={language} onChange={(event) => setLanguage(event.target.value)}><option>انگلیسی</option><option>فارسی</option><option>اسپانیایی</option><option>عربی</option></select></label><div className="generation-checks"><span>✓ متن اصلی و CTA</span><span>✓ ترجمه فارسی اپراتور</span><span>✓ پرامپت تصویر برندشده</span><span>✓ بررسی ادعا و ریسک</span></div>{message && <div className={`generation-message ${state}`}>{message}</div>}</form></ModalShell>}
+    <div className="creative-hero panel lift-card"><div><span className="eyebrow">بسته کامل انتشار</span><h2>محتوا فقط از داده و منبع واقعی ساخته می‌شود.</h2><p>هیچ نمونه آماده‌ای نمایش داده نمی‌شود؛ متن، ترجمه و تصویر پس از تحلیل منابع زنده ظاهر می‌شوند.</p><button className="btn accent" onClick={() => { setState("idle"); setOpen(true); }}>پژوهش برای محتوای جدید ✦</button></div><div className="creative-pipeline">{["سیگنال زنده","راستی‌آزمایی","متن و ترجمه","تصویر اختصاصی","تأیید انسانی"].map((step,index) => <div key={step}><span>{(index+1).toLocaleString("fa-IR")}</span><b>{step}</b></div>)}</div></div>
+    {posts.length ? <div className="creative-grid">{posts.map((post) => <article className="panel content-package lift-card" key={post.id}><header><RiskBadge risk={post.risk}/><b>{post.language}</b></header><h3>{post.title}</h3><p>{post.summaryFa}</p>{post.imageUrl ? <div className="generated-post-image"><Image src={post.imageUrl} alt={post.title} width={1024} height={576} unoptimized /></div> : null}<footer><span>امروز · {post.time}</span><button className="btn accent" onClick={() => onNavigate("content")}>بازبینی در صف محتوا</button></footer></article>)}</div> : <article className="panel empty-state"><strong>هنوز بسته محتوای واقعی ساخته نشده است.</strong><p>پس از اجرای موفق برنامه روزانه یا پژوهش جدید، خروجی منبع‌دار اینجا نمایش داده می‌شود.</p></article>}
+    {open && <ModalShell title="پژوهش برای بسته محتوای جدید" eyebrow="Firecrawl + مدیر هوشمند" onClose={() => state !== "running" && setOpen(false)} closeDisabled={state === "running"} footer={<><button className="btn quiet" onClick={() => setOpen(false)} disabled={state==="running"}>بستن</button><button className="btn accent" type="submit" form="creative-form" disabled={state==="running" || topic.trim().length < 8}>{state==="running" ? "در حال بررسی منابع…" : "شروع پژوهش واقعی"}</button></>}><form id="creative-form" className="creative-form" onSubmit={run}><label>موضوع یا خبر واقعی<textarea value={topic} onChange={(event) => setTopic(event.target.value)} placeholder="موضوع دقیق را وارد کنید" /></label><label>زبان اصلی<select value={language} onChange={(event) => setLanguage(event.target.value)}><option>انگلیسی</option><option>فارسی</option><option>اسپانیایی</option><option>عربی</option></select></label>{message && <div className={`generation-message ${state}`}>{message}</div>}</form></ModalShell>}
   </section>;
 }
+
 
 function GrowthView({ plan }: { plan: DailyManagerPlan | null }) {
   const [copied, setCopied] = useState('');
   const copy = (id:string, value:string) => { void navigator.clipboard.writeText(value); setCopied(id); window.setTimeout(() => setCopied(''), 1800); };
-  const staticOpportunities = [
-    { id:'security', topic:'امنیت کیف‌پول', query:'wallet security private keys on-chain alerts', reason:'تناسب مستقیم با اعتمادسازی محصول', comment:'A useful wallet alert should add context, not fear: what moved, where it went, and whether the pattern is unusual. That makes monitoring actionable without ever needing a private key.' },
-    { id:'solana', topic:'رصد تراکنش‌های Solana', query:'Solana wallet monitoring transaction alerts', reason:'فرصت آموزش قابلیت چندشبکه‌ای', comment:'Fast alerts matter, but clarity matters too. Showing confirmation status and transaction context helps users understand what happened instead of reacting to a raw notification.' },
-    { id:'whales', topic:'تحلیل فعالیت نهنگ‌ها', query:'on-chain whale wallet tracking analytics', reason:'دسترسی به مخاطب معامله‌گر و پژوهشگر', comment:'Tracking a large transfer is only the first signal. Counterparties, repeated behavior, and token concentration are what turn a movement into something worth investigating.' },
-  ];
-  const opportunities = plan?.interactions.length ? plan.interactions.map((item) => ({ id: item.id, topic: item.account, query: item.postUrl, reason: item.reason, comment: item.comment, directUrl: item.postUrl, live: true })) : staticOpportunities.map((item) => ({ ...item, directUrl: `https://x.com/search?q=${encodeURIComponent(item.query)}&src=typed_query&f=live`, live: false }));
+  const opportunities = plan?.interactions.map((item) => ({ id: item.id, topic: item.account, query: item.postUrl, reason: item.reason, comment: item.comment, directUrl: item.postUrl })) || [];
   return <section className="growth-view">
     <div className="growth-hero panel"><div><span className="eyebrow">رشد باکیفیت، نه اسپم</span><h2>سه تعامل معنی‌دار بهتر از سی کامنت تکراری است.</h2><p>عامل موضوع و متن را پیشنهاد می‌دهد؛ اپراتور پست واقعی را می‌بیند و فقط پس از اطمینان منتشر می‌کند.</p></div><div className="api-gate"><i>✓</i><div><strong>اعتبار X برای رشد مصرف نمی‌شود</strong><small>برای حفظ ۵ دلار Owned Reads، پیدا کردن پست هدف با لینک جست‌وجوی دستی انجام می‌شود.</small></div></div></div>
-    <div className="growth-layout"><div className="opportunity-list">{opportunities.map((item) => <article className="panel opportunity-card lift-card" key={item.id}><header><div><span className="eyebrow">{item.live ? "فرصت زنده امروز" : "فرصت تعامل"}</span><h3>{item.topic}</h3></div><span className="match-score">{item.live ? "LIVE" : "۹۲٪"}</span></header><div className="target-query"><small>{item.live ? "لینک پست واقعی در X" : "عبارت کشف پست هدف"}</small><code dir="ltr">{item.query}</code></div><p>{item.reason}</p><blockquote dir="ltr">{item.comment}</blockquote><footer><a className="btn quiet" href={item.directUrl} target="_blank" rel="noreferrer">بازکردن پست در X ↗</a><button className="btn accent" onClick={() => copy(item.id,item.comment)}>{copied === item.id ? '✓ کپی شد' : 'کپی کامنت پیشنهادی'}</button></footer></article>)}</div>
+    <div className="growth-layout"><div className="opportunity-list">{opportunities.map((item) => <article className="panel opportunity-card lift-card" key={item.id}><header><div><span className="eyebrow">فرصت زنده امروز</span><h3>{item.topic}</h3></div><span className="match-score">LIVE</span></header><div className="target-query"><small>لینک پست واقعی در X</small><code dir="ltr">{item.query}</code></div><p>{item.reason}</p><blockquote dir="ltr">{item.comment}</blockquote><footer><a className="btn quiet" href={item.directUrl} target="_blank" rel="noreferrer">بازکردن پست در X ↗</a><button className="btn accent" onClick={() => copy(item.id,item.comment)}>{copied === item.id ? '✓ کپی شد' : 'کپی کامنت پیشنهادی'}</button></footer></article>)}{opportunities.length === 0 && <article className="panel empty-state"><strong>فرصت تعامل واقعی پیدا نشده است.</strong><p>تا زمانی که مدیر هوشمند یک پست واقعی و مرتبط در X پیدا نکند، پیشنهادی نمایش داده نمی‌شود.</p></article>}</div>
       <aside className="growth-side"><article className="panel guard-card"><span className="eyebrow">گارد ضداسپم</span><h3>قبل از هر تعامل</h3><ul><li><b>ارتباط:</b> پست باید واقعاً درباره موضوع محصول باشد.</li><li><b>اصالت:</b> شباهت با کامنت‌های قبلی کمتر از ۷۲٪.</li><li><b>تعداد:</b> حداکثر ۳ تا ۵ تعامل دستی باکیفیت در روز.</li><li><b>توقف:</b> پاسخ تکراری، لایک خودکار و فالو انبوه ممنوع.</li></ul></article><article className="panel target-accounts"><span className="eyebrow">سبد اکانت هدف</span><h3>چه کسانی ارزش رصد دارند؟</h3>{[['پژوهشگران امنیت وب۳','اعتماد و آموزش'],['تحلیل‌گران داده آن‌چین','اثبات کاربرد'],['اکوسیستم‌های Solana و EVM','کشف مخاطب'],['سازندگان ابزار معامله‌گری','همکاری محصول']].map((item) => <div key={item[0]}><span>◎</span><p><strong>{item[0]}</strong><small>{item[1]}</small></p><b>روزانه</b></div>)}</article></aside></div>
   </section>;
 }
+
 
 function BudgetView() {
   return (
@@ -951,11 +838,21 @@ export default function DashboardClient() {
   const transitionTimers = useRef<number[]>([]);
   const sentReplies = useStoredIds("wallet-social-sent-replies");
   const sentPosts = useStoredIds("wallet-social-sent-posts");
-  const managedReplies = useStoredCollection<ReplyItem>("wallet-social-reply-items", replies);
-  const managedContent = useStoredCollection<ContentItem>("wallet-social-content-items", contentItems);
+  const managedReplies = useStoredCollection<ReplyItem>("wallet-social-reply-items-live-v2", replies);
+  const managedContent = useStoredCollection<ContentItem>("wallet-social-content-items-live-v2", contentItems);
   const dailyManager = useDailyManagerPlan();
   const setManagedContent = managedContent.setItems;
   const setManagedReplies = managedReplies.setItems;
+
+  useEffect(() => {
+    [
+      "wallet-social-reply-items",
+      "wallet-social-content-items",
+      "wallet-social-research-results",
+      "wallet-social-daily-tasks",
+      "wallet-social-last-creative-brief",
+    ].forEach((key) => window.localStorage.removeItem(key));
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -1091,14 +988,14 @@ export default function DashboardClient() {
         <div className={`content content-stage ${transitionPhase === "leaving" ? "is-leaving" : ""}`} aria-busy={isLoading || transitionPhase !== "idle"}>
           {(isLoading || transitionPhase === "loading") ? <ViewSkeleton /> : <div className="view-enter" key={view}>
             {view === "overview" && <Overview onNavigate={changeView} manager={dailyManager}/>}
-            {view === "strategy" && <StrategyView onNavigate={changeView}/>}
+            {view === "strategy" && <StrategyView onNavigate={changeView} plan={dailyManager.plan}/>}
             {view === "tasks" && <TasksView onNavigate={changeView} plan={dailyManager.plan}/>}
-            {view === "creative" && <CreativeView onNavigate={changeView}/>}
+            {view === "creative" && <CreativeView onNavigate={changeView} plan={dailyManager.plan}/>}
             {view === "growth" && <GrowthView plan={dailyManager.plan}/>}
             {view === "replies" && <RepliesView replyItems={managedReplies.items} onRepliesChange={managedReplies.setItems} sentIds={sentReplies.ids} onMarkSent={sentReplies.mark}/>}
             {view === "content" && <ContentView content={managedContent.items} onContentChange={managedContent.setItems} sentIds={sentPosts.ids} onMarkSent={sentPosts.mark}/>}
             {view === "sent" && <SentView replyIds={sentReplies.ids} postIds={sentPosts.ids} replyItems={managedReplies.items} content={managedContent.items}/>}
-            {view === "telegram" && <TelegramView onNavigate={changeView}/>}
+            {view === "telegram" && <TelegramView/>}
             {view === "research" && <ResearchView/>}
             {view === "budget" && <BudgetView/>}
             {view === "settings" && <SettingsView/>}

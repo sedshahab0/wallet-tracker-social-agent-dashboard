@@ -173,9 +173,13 @@ test("ships the full-service strategy, creative and growth workflows", async () 
   assert.match(page, /کارهای امروز/);
   assert.match(page, /استودیوی محتوا/);
   assert.match(page, /رشد و تعامل/);
-  assert.match(page, /Audience activity × Freshness × Quality × Format fit × Risk gate/);
-  assert.match(page, /wallet-social-daily-tasks/);
-  assert.match(page, /wallet-social-last-creative-brief/);
+  assert.match(page, /wallet-social-daily-tasks-live-v2/);
+  assert.match(page, /wallet-social-last-creative-brief-live-v2/);
+  assert.match(page, /هیچ وظیفه آزمایشی نمایش داده نمی‌شود/);
+  assert.match(page, /فرصت تعامل واقعی پیدا نشده است/);
+  assert.match(page, /هنوز بسته محتوای واقعی ساخته نشده است/);
+  assert.doesNotMatch(page, /@carlos_chain|@noor_web3|@chainwatcher|dailyTaskSeed|staticOpportunities|strategyDays/);
+  assert.doesNotMatch(page, /رهگیری کیف‌پول‌های سولانا فعال شد|پرسش‌های امنیت کیف‌پول در حال افزایش است|پست جدید آماده انتشار است/);
   assert.match(page, /اعتبار X برای رشد مصرف نمی‌شود/);
   assert.match(page, /شباهت با کامنت‌های قبلی کمتر از ۷۲٪/);
   assert.match(css, /\.calendar-grid/);
