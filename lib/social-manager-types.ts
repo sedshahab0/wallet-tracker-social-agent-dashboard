@@ -7,6 +7,22 @@ export type LiveSource = {
   channel: "x" | "news" | "product" | "account" | "project" | "competitor";
 };
 
+export type AccountRecentPost = {
+  id: string;
+  url: string;
+  text: string;
+  postedAt: string;
+};
+
+export type AccountState = {
+  handle: string;
+  stage: "bootstrap" | "early" | "active";
+  profileUrl: string;
+  recentPosts: AccountRecentPost[];
+  summaryFa: string;
+  scrapedAt: string;
+};
+
 export type DailyManagerTask = {
   id: string;
   time: string;
@@ -54,6 +70,7 @@ export type DailyManagerPlan = {
   todayGoal: string;
   publishDecision: "publish" | "light" | "pause";
   publishReason: string;
+  accountState: AccountState;
   tasks: DailyManagerTask[];
   posts: DailyManagerPost[];
   interactions: DailyManagerInteraction[];

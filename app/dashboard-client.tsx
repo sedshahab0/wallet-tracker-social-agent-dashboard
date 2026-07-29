@@ -25,6 +25,10 @@ type ReplyItem = {
   reviewReason?: string;
   contextRevision?: string;
   liveContextUsed?: boolean;
+  tweetUrl?: string;
+  authorId?: string;
+  publishVerified?: boolean;
+  matchedUrl?: string;
 };
 type ContentItem = {
   id: string;
@@ -39,7 +43,11 @@ type ContentItem = {
   imageUrl?: string;
   imageError?: string;
   sourceUrls?: string[];
+  publishVerified?: boolean;
+  matchedUrl?: string;
 };
+
+type PublishProof = { verified: boolean; matchedUrl?: string; message: string };
 type ResearchSource = {
   title: string;
   url: string;
@@ -157,6 +165,17 @@ function viewFromPathname(pathname: string): View {
 const replies: ReplyItem[] = [];
 
 const contentItems: ContentItem[] = [];
+
+async function verifyPublication(kind: "post" | "reply", text: string, targetUrl?: string): Promise<PublishProof> {
+  const response = await fetch("/api/x/verify", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ kind, text, targetUrl }),
+  });
+  const payload = await response.json() as { ok?: boolean; verified?: boolean; matchedUrl?: string; message?: string; error?: string };
+  if (!response.ok || !payload.ok) throw new Error(payload.error || payload.message || "راستی‌آزمایی انتشار ناموفق بود.");
+  return { verified: Boolean(payload.verified), matchedUrl: payload.matchedUrl || "", message: payload.message || "" };
+}
 
 function useStoredIds(key: string) {
   const [ids, setIds] = useState<string[]>([]);
@@ -363,6 +382,8 @@ function Overview({ onNavigate, manager }: { onNavigate: (view: View) => void; m
 
       {plan && <article className={`publish-decision panel ${plan.publishDecision}`}><span>{plan.publishDecision === "publish" ? "امروز منتشر می‌کنیم" : plan.publishDecision === "light" ? "امروز سبک منتشر می‌کنیم" : "امروز پست تازه نمی‌گذاریم"}</span><strong>{plan.publishReason}</strong></article>}
 
+      {plan?.accountState && <article className="panel account-state-card"><div className="panel-head"><div><span className="eyebrow">وضعیت زنده اکانت رسمی</span><h3 dir="ltr">{plan.accountState.handle}</h3></div><span className="sent-chip">{plan.accountState.stage === "bootstrap" ? "راه‌اندازی" : plan.accountState.stage === "early" ? "ابتدایی" : "فعال"}</span></div><p>{plan.accountState.summaryFa}</p><div className="account-recent-posts">{plan.accountState.recentPosts.length ? plan.accountState.recentPosts.slice(0, 3).map((post) => <a key={post.id} href={post.url} target="_blank" rel="noreferrer"><small dir="ltr">{post.postedAt || post.url}</small><span dir="auto">{post.text}</span></a>) : <div className="empty-state compact"><strong>پست عمومی تازه‌ای دیده نشد.</strong><p>برنامه امروز باید محافظه‌کارانه و معرفی‌محور باشد.</p></div>}</div></article>}
+
       {plan && <div className="simple-status panel"><div><i className="status-dot"/><span><strong>وضعیت عمومی اکانت بررسی شد</strong><small>{plan.sources.filter((source) => source.channel === "account").length.toLocaleString("fa-IR")} منبع از پروفایل و پست‌های عمومی اکانت با Firecrawl</small></span></div><div><i className="budget-lock">✓</i><span><strong>دانش واقعی پروژه وارد تصمیم شد</strong><small>{plan.sources.filter((source) => source.channel === "project" || source.channel === "product").length.toLocaleString("fa-IR")} منبع اول‌شخص از مخزن و وب‌سایت محصول</small></span></div><div><i className="telegram-dot">◇</i><span><strong>بازار و گفتگوهای مرتبط رصد شدند</strong><small>{plan.sources.filter((source) => ["x", "news", "competitor"].includes(source.channel)).length.toLocaleString("fa-IR")} منبع تازه از X، خبر و رقبا؛ بدون مصرف اعتبار X API</small></span></div></div>}
 
       <div className="operator-journey">
@@ -386,6 +407,7 @@ function RepliesView({ replyItems, onRepliesChange, sentIds, onMarkSent }: { rep
   const [search, setSearch] = useState("");
   const [language, setLanguage] = useState("all");
   const [toast, setToast] = useState("");
+  const [verifying, setVerifying] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [editAnswer, setEditAnswer] = useState("");
@@ -401,10 +423,11 @@ function RepliesView({ replyItems, onRepliesChange, sentIds, onMarkSent }: { rep
   const reply = visibleReplies.find((item) => item.id === selectedId) || visibleReplies[0] || replyItems.find((item) => item.id === selectedId) || replyItems[0];
   if (!reply) return <div className="panel empty-state"><strong>پاسخی در صف نیست.</strong><p>پس از دریافت نخستین پاسخ، جزئیات آن در این بخش نمایش داده می‌شود.</p></div>;
   const isSent = sentIds.includes(reply.id);
+  const tweetUrl = reply.tweetUrl || `https://x.com/i/web/status/${reply.id}`;
 
   const notify = (message: string) => {
     setToast(message);
-    window.setTimeout(() => setToast(""), 2200);
+    window.setTimeout(() => setToast(""), 2800);
   };
 
   const copyAnswer = async () => {
@@ -431,17 +454,35 @@ function RepliesView({ replyItems, onRepliesChange, sentIds, onMarkSent }: { rep
     notify("پاسخ برای بررسی مدیر علامت‌گذاری شد");
   };
 
+  const confirmSent = async () => {
+    setVerifying(true);
+    try {
+      const proof = await verifyPublication("reply", reply.answer, tweetUrl);
+      if (!proof.verified) {
+        notify(proof.message || "پاسخ هنوز روی گفتگوی عمومی دیده نشد.");
+        return;
+      }
+      onRepliesChange(replyItems.map((item) => item.id === reply.id ? { ...item, publishVerified: true, matchedUrl: proof.matchedUrl || tweetUrl } : item));
+      onMarkSent(reply.id);
+      notify(proof.message || "انتشار پاسخ در X تأیید شد.");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "راستی‌آزمایی پاسخ ناموفق بود.");
+    } finally {
+      setVerifying(false);
+    }
+  };
+
   return (
     <section className="inbox-layout">
       <article className="panel inbox-list-panel">
         <div className="panel-head inbox-head"><div><span className="eyebrow">{visibleReplies.length} مورد در این نما</span><h3>پاسخ‌های دریافتی</h3></div><select className="filter-btn" value={language} onChange={(event) => setLanguage(event.target.value)} aria-label="فیلتر زبان"><option value="all">همه زبان‌ها</option>{languages.map((item) => <option value={item} key={item}>{item}</option>)}</select></div>
-        <label className="search-box"><span>⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="جست‌وجوی پاسخ یا نام کاربر…" /></label>
+        <label className="search-box"><span>⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="جست‌وجوی پاسخ یا آیدی توییتر…" /></label>
         <div className="inbox-list">
           {visibleReplies.map((item) => (
             <button key={item.id} className={`inbox-item ${reply.id === item.id ? "active" : ""} ${sentIds.includes(item.id) ? "handled" : ""}`} onClick={() => { setSelectedId(item.id); setMoreOpen(false); }}>
               <span className="avatar">{item.avatar}</span>
-              <span><strong>{item.handle}</strong><small>{item.original}</small><em>{item.language} · {item.age}</em></span>
-              {sentIds.includes(item.id) ? <span className="sent-chip">ارسال‌شده</span> : <RiskBadge risk={escalated.ids.includes(item.id) ? "red" : item.risk} />}
+              <span><strong dir="ltr">{item.handle.startsWith("@") ? item.handle : `@${item.handle}`}</strong><small>{item.original}</small><em>{item.language} · {item.age}</em></span>
+              {sentIds.includes(item.id) ? <span className="sent-chip">{item.publishVerified ? "تأییدشد" : "ارسال‌شده"}</span> : <RiskBadge risk={escalated.ids.includes(item.id) ? "red" : item.risk} />}
             </button>
           ))}
           {visibleReplies.length === 0 && <div className="empty-state compact"><strong>پاسخی پیدا نشد.</strong><p>عبارت جست‌وجو یا فیلتر زبان را تغییر دهید.</p></div>}
@@ -451,8 +492,8 @@ function RepliesView({ replyItems, onRepliesChange, sentIds, onMarkSent }: { rep
       <article className="panel conversation-panel">
         <div className="conversation-motion" key={reply.id}>
         <div className="conversation-head">
-              <div className="identity"><span className="avatar large">{reply.avatar}</span><div><strong>{reply.handle}</strong><small>{reply.language} · {reply.sentiment} · {reply.age} قبل</small></div></div>
-          <div><RiskBadge risk={escalated.ids.includes(reply.id) ? "red" : reply.risk} /><div className="action-menu-wrap"><button className={`icon-button ${moreOpen ? "active" : ""}`} onClick={() => setMoreOpen((value) => !value)} aria-label="اقدام‌های بیشتر" aria-expanded={moreOpen}>•••</button>{moreOpen && <div className="action-menu"><button onClick={async () => { await navigator.clipboard?.writeText(reply.original); setMoreOpen(false); notify("متن اصلی کاربر کپی شد"); }}>کپی متن کاربر</button><button onClick={() => { setMoreOpen(false); window.open(`https://x.com/i/web/status/${reply.id}`, "_blank", "noopener,noreferrer"); }}>مشاهده کامنت در X ↗</button></div>}</div></div>
+              <div className="identity"><span className="avatar large">{reply.avatar}</span><div><strong dir="ltr">{reply.handle.startsWith("@") ? reply.handle : `@${reply.handle}`}</strong><small>{reply.language} · {reply.sentiment} · {reply.age} قبل</small><a className="tweet-deep-link" href={tweetUrl} target="_blank" rel="noreferrer" dir="ltr">{tweetUrl}</a></div></div>
+          <div><RiskBadge risk={escalated.ids.includes(reply.id) ? "red" : reply.risk} /><div className="action-menu-wrap"><button className={`icon-button ${moreOpen ? "active" : ""}`} onClick={() => setMoreOpen((value) => !value)} aria-label="اقدام‌های بیشتر" aria-expanded={moreOpen}>•••</button>{moreOpen && <div className="action-menu"><button onClick={async () => { await navigator.clipboard?.writeText(reply.original); setMoreOpen(false); notify("متن اصلی کاربر کپی شد"); }}>کپی متن کاربر</button><button onClick={async () => { await navigator.clipboard?.writeText(tweetUrl); setMoreOpen(false); notify("لینک کامنت کپی شد"); }}>کپی لینک کامنت</button><button onClick={() => { setMoreOpen(false); window.open(tweetUrl, "_blank", "noopener,noreferrer"); }}>مشاهده کامنت در X ↗</button></div>}</div></div>
         </div>
         <div className="original-post">
           <span className="context-label">پاسخ دریافت‌شده</span>
@@ -465,13 +506,13 @@ function RepliesView({ replyItems, onRepliesChange, sentIds, onMarkSent }: { rep
           <div className="translation answer-translation"><span>ترجمه پاسخ</span><p dir="rtl">{reply.answerTranslation}</p></div>
           <div className="source-strip"><span>منبع پاسخ</span><b>منشن واقعی اکانت در X</b><b>{reply.liveContextUsed ? "کانتکست عمومی گفتگو با Firecrawl" : "متن مستقیم منشن"}</b><b title={reply.groundingFacts?.join(" · ") || reply.reviewReason || "دانش تأییدشده پروژه"}>{reply.contextRevision ? `دانش پروژه · ${reply.contextRevision.slice(0, 8)}` : "دانش قدیمی · بازتولید لازم"}</b></div>
           {reply.reviewReason && <div className="modal-hint"><i />{reply.reviewReason}</div>}
-          <div className="operator-steps" aria-label="مراحل اپراتور"><span><b>۱</b> پاسخ را کپی کن</span><span><b>۲</b> گفتگو را در X باز کن</span><span><b>۳</b> ارسال را ثبت کن</span></div>
+          <div className="operator-steps" aria-label="مراحل اپراتور"><span><b>۱</b> پاسخ را کپی کن</span><span><b>۲</b> گفتگو را در X باز کن</span><span><b>۳</b> ارسال را با Firecrawl تأیید کن</span></div>
           <div className="answer-actions">
             <button className="btn quiet" onClick={openEditor}>ویرایش پاسخ</button>
             <button className={`btn quiet ${escalated.ids.includes(reply.id) ? "done" : ""}`} disabled={escalated.ids.includes(reply.id)} onClick={escalateReply}>{escalated.ids.includes(reply.id) ? "✓ ارجاع شد" : "ارجاع به مدیر"}</button>
             <button className="btn accent" onClick={copyAnswer}>کپی پاسخ</button>
-            <button className="btn primary" onClick={() => window.open(`https://x.com/i/web/status/${reply.id}`, "_blank", "noopener,noreferrer")}>بازکردن گفتگو در X ↗</button>
-            <button className={`btn sent-action ${isSent ? "done" : ""}`} disabled={isSent} onClick={() => { onMarkSent(reply.id); notify("پاسخ به‌عنوان ارسال‌شده ثبت شد"); }}>{isSent ? "✓ پاسخ ارسال شده است" : "من این پاسخ را ارسال کردم"}</button>
+            <button className="btn primary" onClick={() => window.open(tweetUrl, "_blank", "noopener,noreferrer")}>بازکردن گفتگو در X ↗</button>
+            <button className={`btn sent-action ${isSent ? "done" : ""}`} disabled={isSent || verifying} onClick={() => void confirmSent()}>{isSent ? (reply.publishVerified ? "✓ در X تأیید شد" : "✓ پاسخ ارسال شده است") : verifying ? "در حال تأیید روی X…" : "من این پاسخ را ارسال کردم"}</button>
           </div>
         </div>
         </div>
@@ -486,12 +527,13 @@ function ContentView({ content, onContentChange, sentIds, onMarkSent, onRetryIma
   const [filter, setFilter] = useState<"all" | Risk>("all");
   const [status, setStatus] = useState<"all" | "ready" | "sent">("all");
   const [toast, setToast] = useState("");
+  const [verifyingId, setVerifyingId] = useState("");
   const [editorOpen, setEditorOpen] = useState(false);
   const [previewImage, setPreviewImage] = useState<{ src: string; title: string } | null>(null);
   const [draft, setDraft] = useState<ContentItem>({ id: "", type: "به‌روزرسانی محصول", title: "", body: "", language: "انگلیسی", risk: "green", time: "زمان‌بندی نشده", source: "", postText: "" });
   const items = useMemo(() => content.filter((item) => filter === "all" || item.risk === filter), [content, filter]);
   const visibleItems = items.filter((item) => status === "all" || (status === "sent") === sentIds.includes(item.id));
-  const notify = (message: string) => { setToast(message); window.setTimeout(() => setToast(""), 2200); };
+  const notify = (message: string) => { setToast(message); window.setTimeout(() => setToast(""), 2800); };
   const copyPost = async (text: string) => { await navigator.clipboard?.writeText(text); notify("متن پست کپی شد؛ آن را در X منتشر کنید"); };
   const openEditor = (item?: ContentItem) => {
     setDraft(item ? { ...item } : { id: "", type: "به‌روزرسانی محصول", title: "", body: "", language: "انگلیسی", risk: "green", time: "زمان‌بندی نشده", source: "", postText: "" });
@@ -508,6 +550,23 @@ function ContentView({ content, onContentChange, sentIds, onMarkSent, onRetryIma
       notify("پیش‌نویس جدید به صف محتوا اضافه شد");
     }
     setEditorOpen(false);
+  };
+  const confirmPublished = async (item: ContentItem) => {
+    setVerifyingId(item.id);
+    try {
+      const proof = await verifyPublication("post", item.postText);
+      if (!proof.verified) {
+        notify(proof.message || "پست هنوز روی صفحه اکانت دیده نشد.");
+        return;
+      }
+      onContentChange(content.map((entry) => entry.id === item.id ? { ...entry, publishVerified: true, matchedUrl: proof.matchedUrl || X_ACCOUNT_URL } : entry));
+      onMarkSent(item.id);
+      notify(proof.message || "انتشار پست در X تأیید شد.");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "راستی‌آزمایی پست ناموفق بود.");
+    } finally {
+      setVerifyingId("");
+    }
   };
   return (
     <section>
@@ -526,14 +585,15 @@ function ContentView({ content, onContentChange, sentIds, onMarkSent, onRetryIma
         {visibleItems.map((item) => {
           const isSent = sentIds.includes(item.id);
           return <article className={`panel content-card ${isSent ? "is-sent" : ""}`} key={item.id}>
-            <div className="content-card-top"><span className="content-type">{item.type}</span>{isSent ? <span className="sent-chip">✓ منتشرشده</span> : <RiskBadge risk={item.risk} />}</div>
+            <div className="content-card-top"><span className="content-type">{item.type}</span>{isSent ? <span className="sent-chip">{item.publishVerified ? "✓ در X تأیید شد" : "✓ منتشرشده"}</span> : <RiskBadge risk={item.risk} />}</div>
             <h3>{item.title}</h3><p>{item.body}</p>
             {item.imageUrl ? <div className="generated-post-image"><button className="image-preview-button" type="button" onClick={() => setPreviewImage({ src: item.imageUrl!, title: item.title })} aria-label={`بزرگ‌نمایی تصویر ${item.title}`}><Image src={item.imageUrl} alt={`تصویر اختصاصی ${item.title}`} width={1024} height={576} unoptimized /><i aria-hidden="true">⌕</i></button><span>برای مشاهده بزرگ‌تر روی تصویر بزنید</span></div> : item.imageError ? <div className="generated-post-image pending failed"><strong>تولید تصویر کامل نشد</strong><span>{item.imageError}</span><button className="btn quiet" onClick={onRetryImages}>تلاش دوباره برای تصویر</button></div> : <div className="generated-post-image pending"><span className="button-spinner"/><strong>تصویر اختصاصی در حال تولید است…</strong></div>}
             <div className="content-meta"><span>{item.language}</span><span>{item.time}</span></div>
             <div className="source-box"><span>منبع</span><strong>{item.source}</strong></div>
             <div className="publish-copy" dir="auto"><span>متن نهایی برای X</span><p>{item.postText}</p></div>
-            <div className="operator-steps compact"><span><b>۱</b> کپی</span><span><b>۲</b> انتشار در X</span><span><b>۳</b> ثبت در داشبورد</span></div>
-            <div className="card-actions"><button className="btn quiet" onClick={() => openEditor(item)}>ویرایش</button><button className="btn accent" onClick={() => copyPost(item.postText)}>کپی متن</button><button className="btn primary" onClick={() => window.open("https://x.com/compose/post", "_blank", "noopener,noreferrer")}>بازکردن X ↗</button><button className={`btn sent-action ${isSent ? "done" : ""}`} disabled={isSent} onClick={() => { onMarkSent(item.id); notify("پست به‌عنوان منتشرشده ثبت شد"); }}>{isSent ? "✓ انتشار ثبت شد" : "من این پست را منتشر کردم"}</button></div>
+            {item.matchedUrl && <a className="tweet-deep-link" href={item.matchedUrl} target="_blank" rel="noreferrer" dir="ltr">{item.matchedUrl}</a>}
+            <div className="operator-steps compact"><span><b>۱</b> کپی</span><span><b>۲</b> انتشار در X</span><span><b>۳</b> تأیید با Firecrawl</span></div>
+            <div className="card-actions"><button className="btn quiet" onClick={() => openEditor(item)}>ویرایش</button><button className="btn accent" onClick={() => copyPost(item.postText)}>کپی متن</button><button className="btn primary" onClick={() => window.open("https://x.com/compose/post", "_blank", "noopener,noreferrer")}>بازکردن X ↗</button><button className={`btn sent-action ${isSent ? "done" : ""}`} disabled={isSent || verifyingId === item.id} onClick={() => void confirmPublished(item)}>{isSent ? (item.publishVerified ? "✓ در X تأیید شد" : "✓ انتشار ثبت شد") : verifyingId === item.id ? "در حال تأیید روی X…" : "من این پست را منتشر کردم"}</button></div>
           </article>;
         })}
       </div>
@@ -547,8 +607,8 @@ function ContentView({ content, onContentChange, sentIds, onMarkSent, onRetryIma
 
 function SentView({ replyIds, postIds, replyItems, content }: { replyIds: string[]; postIds: string[]; replyItems: ReplyItem[]; content: ContentItem[] }) {
   const records = [
-    ...content.filter((item) => postIds.includes(item.id)).map((item) => ({ id: item.id, type: "پست", title: item.title, detail: item.postText, language: item.language })),
-    ...replyItems.filter((item) => replyIds.includes(item.id)).map((item) => ({ id: item.id, type: "پاسخ", title: `پاسخ به ${item.handle}`, detail: item.answer, language: item.language })),
+    ...content.filter((item) => postIds.includes(item.id)).map((item) => ({ id: item.id, type: "پست", title: item.title, detail: item.postText, language: item.language, url: item.matchedUrl || X_ACCOUNT_URL, verified: Boolean(item.publishVerified) })),
+    ...replyItems.filter((item) => replyIds.includes(item.id)).map((item) => ({ id: item.id, type: "پاسخ", title: `پاسخ به ${item.handle}`, detail: item.answer, language: item.language, url: item.matchedUrl || item.tweetUrl || `https://x.com/i/web/status/${item.id}`, verified: Boolean(item.publishVerified) })),
   ];
   return <section>
     <div className="history-summary">
@@ -557,8 +617,8 @@ function SentView({ replyIds, postIds, replyItems, content }: { replyIds: string
       <article className="panel"><span>پاسخ ارسال‌شده</span><strong>{replyIds.length}</strong><small>با زبان اصلی کاربر</small></article>
     </div>
     <article className="panel history-panel">
-      <div className="panel-head"><div><span className="eyebrow">گزارش عملیات</span><h3>ارسال‌های تأییدشده اپراتور</h3><p>این فهرست از دکمه «من ارسال کردم» ساخته می‌شود و فعلاً زمان مرورگر و متن نهایی را نگه می‌دارد؛ لینک دقیق پست فقط وقتی در X باز می‌شود قابل مشاهده است.</p></div></div>
-      {records.length === 0 ? <div className="empty-state"><strong>هنوز ارسالی ثبت نشده است.</strong><p>پس از انتشار در X، دکمه «من ارسال کردم» را در صف محتوا یا صندوق پاسخ‌ها بزنید.</p></div> : <div className="history-list">{records.map((record) => <div className="history-row" key={record.id}><span className={`history-icon ${record.type === "پست" ? "post" : "reply"}`}>{record.type === "پست" ? "≡" : "↩"}</span><div><strong>{record.title}</strong><p dir="auto">{record.detail}</p><small>{record.language} · میز اپراتور · ثبت محلی</small></div><span className="sent-chip">✓ ثبت‌شده</span><button className="btn quiet" onClick={() => window.open("https://x.com/", "_blank", "noopener,noreferrer")}>بازکردن X ↗</button></div>)}</div>}
+      <div className="panel-head"><div><span className="eyebrow">گزارش عملیات</span><h3>ارسال‌های تأییدشده اپراتور</h3><p>پس از دکمه «من ارسال کردم»، Firecrawl صفحه عمومی X را بررسی می‌کند تا مطمئن شود متن واقعاً منتشر شده است.</p></div></div>
+      {records.length === 0 ? <div className="empty-state"><strong>هنوز ارسالی ثبت نشده است.</strong><p>پس از انتشار در X، دکمه «من ارسال کردم» را در صف محتوا یا صندوق پاسخ‌ها بزنید.</p></div> : <div className="history-list">{records.map((record) => <div className="history-row" key={record.id}><span className={`history-icon ${record.type === "پست" ? "post" : "reply"}`}>{record.type === "پست" ? "≡" : "↩"}</span><div><strong>{record.title}</strong><p dir="auto">{record.detail}</p><small>{record.language} · {record.verified ? "تأییدشده با Firecrawl" : "ثبت محلی اپراتور"}</small>{record.url && <a className="tweet-deep-link" href={record.url} target="_blank" rel="noreferrer" dir="ltr">{record.url}</a>}</div><span className="sent-chip">{record.verified ? "✓ تأییدشد" : "✓ ثبت‌شده"}</span><button className="btn quiet" onClick={() => window.open(record.url || "https://x.com/", "_blank", "noopener,noreferrer")}>بازکردن در X ↗</button></div>)}</div>}
     </article>
   </section>;
 }
@@ -814,9 +874,9 @@ function GrowthView({ plan }: { plan: DailyManagerPlan | null }) {
   const copy = (id:string, value:string) => { void navigator.clipboard.writeText(value); setCopied(id); window.setTimeout(() => setCopied(''), 1800); };
   const opportunities = plan?.interactions.map((item) => ({ id: item.id, topic: item.account, query: item.postUrl, reason: item.reason, comment: item.comment, directUrl: item.postUrl })) || [];
   return <section className="growth-view">
-    <div className="growth-hero panel"><div><span className="eyebrow">رشد باکیفیت، نه اسپم</span><h2>سه تعامل معنی‌دار بهتر از سی کامنت تکراری است.</h2><p>عامل موضوع و متن را پیشنهاد می‌دهد؛ اپراتور پست واقعی را می‌بیند و فقط پس از اطمینان منتشر می‌کند.</p></div><div className="api-gate"><i>✓</i><div><strong>اعتبار X برای رشد مصرف نمی‌شود</strong><small>Firecrawl پست عمومی هدف را پیدا می‌کند؛ X API فقط برای کامنت‌های اکانت خودمان رزرو است.</small></div></div></div>
-    <div className="growth-layout"><div className="opportunity-list">{opportunities.map((item) => <article className="panel opportunity-card lift-card" key={item.id}><header><div><span className="eyebrow">فرصت زنده امروز</span><h3>{item.topic}</h3></div><span className="match-score">LIVE</span></header><div className="target-query"><small>لینک پست واقعی در X</small><code dir="ltr">{item.query}</code></div><p>{item.reason}</p><blockquote dir="ltr">{item.comment}</blockquote><footer><a className="btn quiet" href={item.directUrl} target="_blank" rel="noreferrer">بازکردن پست در X ↗</a><button className="btn accent" onClick={() => copy(item.id,item.comment)}>{copied === item.id ? '✓ کپی شد' : 'کپی کامنت پیشنهادی'}</button></footer></article>)}{opportunities.length === 0 && <article className="panel empty-state"><strong>فرصت تعامل واقعی پیدا نشده است.</strong><p>تا زمانی که مدیر هوشمند یک پست واقعی و مرتبط در X پیدا نکند، پیشنهادی نمایش داده نمی‌شود.</p></article>}</div>
-      <aside className="growth-side"><article className="panel guard-card"><span className="eyebrow">گارد ضداسپم</span><h3>قبل از هر تعامل</h3><ul><li><b>ارتباط:</b> پست باید واقعاً درباره موضوع محصول باشد.</li><li><b>اصالت:</b> کامنت عمومی، تکراری یا صرفاً تبلیغاتی رد می‌شود.</li><li><b>تعداد:</b> حداکثر ۴ تعامل دستی باکیفیت در روز.</li><li><b>توقف:</b> پاسخ تکراری، لایک خودکار و فالو انبوه ممنوع.</li></ul></article><article className="panel target-accounts"><span className="eyebrow">اکانت‌های واقعی امروز</span><h3>چه کسانی ارزش تعامل دارند؟</h3>{(plan?.interactions || []).map((item) => <div key={item.id}><span>◎</span><p><strong>{item.account}</strong><small>{item.reason}</small></p><b>{item.time}</b></div>)}{!plan?.interactions.length && <div className="empty-state compact"><strong>هدف تأییدشده‌ای نیست.</strong><p>هیچ اکانت نمونه‌ای نمایش داده نمی‌شود.</p></div>}</article></aside></div>
+    <div className="growth-hero panel"><div><span className="eyebrow">رشد باکیفیت، نه اسپم</span><h2>سه تعامل معنی‌دار بهتر از سی کامنت تکراری است.</h2><p>هر پیشنهاد فقط وقتی نمایش داده می‌شود که لینک کامل پست واقعی X از Firecrawl موجود باشد.</p></div><div className="api-gate"><i>✓</i><div><strong>اعتبار X برای رشد مصرف نمی‌شود</strong><small>Firecrawl پست عمومی هدف را پیدا می‌کند؛ X API فقط برای کامنت‌های اکانت خودمان رزرو است.</small></div></div></div>
+    <div className="growth-layout"><div className="opportunity-list">{opportunities.map((item) => <article className="panel opportunity-card lift-card" key={item.id}><header><div><span className="eyebrow">فرصت زنده امروز</span><h3 dir="ltr">{item.topic.startsWith("@") ? item.topic : `@${item.topic}`}</h3></div><span className="match-score">LIVE</span></header><div className="target-query"><small>لینک کامل پست برای گذاشتن کامنت</small><a href={item.directUrl} target="_blank" rel="noreferrer" dir="ltr">{item.query}</a></div><p>{item.reason}</p><blockquote dir="ltr">{item.comment}</blockquote><footer><a className="btn quiet" href={item.directUrl} target="_blank" rel="noreferrer">بازکردن پست در X ↗</a><button className="btn quiet" onClick={() => copy(`${item.id}-url`, item.directUrl)}>{copied === `${item.id}-url` ? '✓ لینک کپی شد' : 'کپی لینک پست'}</button><button className="btn accent" onClick={() => copy(item.id,item.comment)}>{copied === item.id ? '✓ کپی شد' : 'کپی کامنت پیشنهادی'}</button></footer></article>)}{opportunities.length === 0 && <article className="panel empty-state"><strong>فرصت تعامل واقعی پیدا نشده است.</strong><p>تا زمانی که مدیر هوشمند یک پست واقعی و مرتبط در X پیدا نکند، پیشنهادی نمایش داده نمی‌شود.</p></article>}</div>
+      <aside className="growth-side"><article className="panel guard-card"><span className="eyebrow">گارد ضداسپم</span><h3>قبل از هر تعامل</h3><ul><li><b>ارتباط:</b> پست باید واقعاً درباره موضوع محصول باشد.</li><li><b>اصالت:</b> کامنت عمومی، تکراری یا صرفاً تبلیغاتی رد می‌شود.</li><li><b>تعداد:</b> حداکثر ۴ تعامل دستی باکیفیت در روز.</li><li><b>توقف:</b> پاسخ تکراری، لایک خودکار و فالو انبوه ممنوع.</li></ul></article><article className="panel target-accounts"><span className="eyebrow">اکانت‌های واقعی امروز</span><h3>چه کسانی ارزش تعامل دارند؟</h3>{(plan?.interactions || []).map((item) => <div key={item.id}><span>◎</span><p><strong dir="ltr">{item.account}</strong><small>{item.reason}</small></p><b>{item.time}</b></div>)}{!plan?.interactions.length && <div className="empty-state compact"><strong>هدف تأییدشده‌ای نیست.</strong><p>هیچ اکانت نمونه‌ای نمایش داده نمی‌شود.</p></div>}</article></aside></div>
   </section>;
 }
 

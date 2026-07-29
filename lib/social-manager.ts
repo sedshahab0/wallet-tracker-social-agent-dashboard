@@ -1,4 +1,5 @@
-import type { DailyManagerPlan, LiveSource } from "@/lib/social-manager-types";
+import { collectOwnAccountState } from "@/lib/account-state";
+import { cleanFirecrawlText, firecrawlRequest, firecrawlScrapeRaw, type FirecrawlHit } from "@/lib/firecrawl";
 import {
   PRODUCT_PROFILE_URL,
   PRODUCT_WEBSITE_URL,
@@ -6,16 +7,10 @@ import {
   PROJECT_CONTEXT_REVISION,
   VERIFIED_PROJECT_SOURCE,
 } from "@/lib/project-knowledge";
-
-type FirecrawlHit = { title?: string; url?: string; description?: string; markdown?: string };
-type FirecrawlPayload = {
-  success?: boolean;
-  data?: { web?: FirecrawlHit[]; news?: FirecrawlHit[]; markdown?: string; metadata?: { title?: string; sourceURL?: string } };
-  web?: FirecrawlHit[];
-  news?: FirecrawlHit[];
-  error?: string;
-};
-type ChatPayload = { choices?: Array<{ message?: { content?: string } }>; error?: { message?: string } };
+import type { AccountState, DailyManagerPlan, LiveSource } from "@/lib/social-manager-types";
+import { xaiChatCompletion } from "@/lib/xai";
+import { extractStatusUrls, normalizeXUrl } from "@/lib/x-thread";
+import { xAccountUsername } from "@/lib/x-api";
 
 const managerSchema = {
   type: "object",
@@ -77,38 +72,11 @@ const managerSchema = {
   },
 } as const;
 
-function cleanText(hit: FirecrawlHit) {
-  return (hit.description || hit.markdown || "").replace(/[#*_\`>\n]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 1800);
-}
-
-function firecrawlTransport() {
-  const apiKey = process.env.FIRECRAWL_API_KEY?.trim();
-  if (!apiKey) throw new Error("کلید Firecrawl تنظیم نشده است.");
-  const proxyUrl = process.env.FIRECRAWL_PROXY_URL?.trim();
-  const proxySecret = process.env.RESEARCH_PROXY_SECRET?.trim();
-  const proxyBearer = process.env.FIRECRAWL_PROXY_BEARER?.trim();
-  const headers: Record<string, string> = { "content-type": "application/json" };
-  if (proxyUrl && proxySecret) {
-    headers["x-research-proxy-key"] = proxySecret;
-    if (proxyBearer) headers["OAI-Sites-Authorization"] = `Bearer ${proxyBearer}`;
-    return { endpoint: proxyUrl, headers, proxied: true };
-  }
-  headers.authorization = `Bearer ${apiKey}`;
-  return { endpoint: "https://api.firecrawl.dev/v2", headers, proxied: false };
-}
-
-async function firecrawlRequest(operation: "search" | "scrape", body: Record<string, unknown>) {
-  const transport = firecrawlTransport();
-  const endpoint = transport.proxied ? transport.endpoint : `${transport.endpoint}/${operation}`;
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: transport.headers,
-    body: JSON.stringify(transport.proxied ? { operation, ...body } : body),
-    signal: AbortSignal.timeout(55_000),
-  });
-  const payload = (await response.json().catch(() => ({}))) as FirecrawlPayload;
-  if (!response.ok || payload.success === false) throw new Error(payload.error || `Firecrawl ${operation} error (${response.status})`);
-  return payload;
+function hitToSource(hit: FirecrawlHit, channel: LiveSource["channel"]): LiveSource | null {
+  if (!hit.url) return null;
+  const description = cleanFirecrawlText(hit.description || hit.markdown || hit.title || "");
+  if (description.length < 35) return null;
+  return { title: hit.title?.trim() || new URL(hit.url).hostname, url: hit.url, description, channel };
 }
 
 async function firecrawlSearch(
@@ -126,54 +94,22 @@ async function firecrawlSearch(
     scrapeOptions: options.hydrate ? { formats: ["markdown"], onlyMainContent: true, maxAge: 3_600_000 } : undefined,
   });
   return [...(payload.data?.web || payload.web || []), ...(payload.data?.news || payload.news || [])]
-    .flatMap((hit) => hit.url ? [{ title: hit.title?.trim() || new URL(hit.url).hostname, url: hit.url, description: cleanText(hit), channel }] : []);
+    .flatMap((hit) => {
+      const source = hitToSource(hit, channel);
+      return source ? [source] : [];
+    });
 }
 
 async function firecrawlScrape(url: string, channel: LiveSource["channel"]): Promise<LiveSource[]> {
-  const payload = await firecrawlRequest("scrape", {
-    url,
-    formats: ["markdown", "links"],
-    onlyMainContent: true,
-    waitFor: 1500,
-    blockAds: true,
-    removeBase64Images: true,
-    maxAge: 900_000,
-    timeout: 45_000,
-  });
-  const markdown = payload.data?.markdown?.replace(/[#*_\`>]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 1800) || "";
+  const payload = await firecrawlScrapeRaw(url);
+  const markdown = cleanFirecrawlText(payload.data?.markdown || "");
   if (!markdown) return [];
-  return [{ title: payload.data?.metadata?.title || new URL(url).hostname, url: payload.data?.metadata?.sourceURL || url, description: markdown, channel }];
-}
-
-export async function collectLiveSources(date: string, focus = "") {
-  const queries = [
-    firecrawlScrape(PRODUCT_PROFILE_URL, "account"),
-    firecrawlScrape(PRODUCT_WEBSITE_URL, "product"),
-    firecrawlSearch("site:x.com/wallettrackerH/status wallettrackerH", "account", { limit: 8, hydrate: true }),
-    firecrawlSearch('site:x.com/*/status ("wallet security" OR "wallet monitoring" OR "on-chain alerts") -giveaway -airdrop', "x", { limit: 10, tbs: "qdr:w", hydrate: true }),
-    firecrawlSearch('site:x.com/*/status ("transaction alerts" OR "wallet tracker") (Solana OR Ethereum OR EVM)', "x", { limit: 10, tbs: "qdr:w", hydrate: true }),
-    firecrawlSearch(`crypto wallet monitoring transaction alert product news ${date}`, "news", { limit: 8, tbs: "qdr:w", hydrate: true, sources: ["news", "web"] }),
-    firecrawlSearch("on-chain wallet analytics security tools launch update", "competitor", { limit: 8, tbs: "qdr:m", hydrate: true, sources: ["news", "web"] }),
-    firecrawlSearch("site:wallettracker.app Wallet Tracker", "product", { limit: 6, hydrate: true }),
-    ...(focus.trim().length >= 8 ? [
-      firecrawlSearch(`${focus.trim()} Wallet Tracker crypto wallet`, "news", { limit: 8, tbs: "qdr:m", hydrate: true, sources: ["news", "web"] }),
-      firecrawlSearch(`site:x.com/*/status ${focus.trim()} -giveaway -airdrop`, "x", { limit: 8, tbs: "qdr:m", hydrate: true }),
-    ] : []),
-  ];
-  const settled = await Promise.allSettled(queries);
-  const seen = new Set<string>();
-  const sources = [VERIFIED_PROJECT_SOURCE, ...settled.flatMap((item) => item.status === "fulfilled" ? item.value : [])].filter((source) => {
-    const key = normalizeUrl(source.url) || source.url;
-    if (seen.has(key) || source.description.length < 35) return false;
-    seen.add(key);
-    return true;
-  }).slice(0, 36);
-  if (sources.length < 4) throw new Error("منابع زنده کافی برای ساخت برنامه قابل اعتماد پیدا نشد.");
-  return sources;
-}
-
-function sourceContext(sources: LiveSource[]) {
-  return sources.map((source, index) => `${index + 1}. [${source.channel}] ${source.title}\nURL: ${source.url}\n${source.description}`).join("\n\n");
+  return [{
+    title: payload.data?.metadata?.title || new URL(url).hostname,
+    url: payload.data?.metadata?.sourceURL || url,
+    description: markdown,
+    channel,
+  }];
 }
 
 function normalizeUrl(value: string) {
@@ -186,8 +122,63 @@ function normalizeUrl(value: string) {
   }
 }
 
+function preferCanonicalStatusUrl(url: string, description = "") {
+  const fromDesc = extractStatusUrls(description)[0];
+  const fromUrl = extractStatusUrls(url)[0];
+  return fromUrl || fromDesc || normalizeXUrl(url) || normalizeUrl(url);
+}
+
+export async function collectLiveSources(date: string, focus = "") {
+  const own = xAccountUsername();
+  const account = await collectOwnAccountState().catch(async () => {
+    const fallback: AccountState = {
+      handle: `@${own}`,
+      stage: "bootstrap",
+      profileUrl: PRODUCT_PROFILE_URL,
+      recentPosts: [],
+      summaryFa: "وضعیت زنده اکانت در این دور خوانده نشد؛ تصمیم‌گیری محافظه‌کارانه.",
+      scrapedAt: new Date().toISOString(),
+    };
+    return { state: fallback, sources: [] as LiveSource[] };
+  });
+
+  const queries = [
+    firecrawlScrape(PRODUCT_WEBSITE_URL, "product"),
+    firecrawlSearch(`site:x.com/${own}/status`, "account", { limit: 8, hydrate: true }),
+    firecrawlSearch('site:x.com/*/status ("wallet security" OR "wallet monitoring" OR "on-chain alerts" OR "transaction alerts") -giveaway -airdrop', "x", { limit: 10, tbs: "qdr:w", hydrate: true }),
+    firecrawlSearch(`site:x.com/*/status ("Wallet Tracker" OR wallettracker OR @${own}) -giveaway -airdrop`, "x", { limit: 8, tbs: "qdr:w", hydrate: true }),
+    firecrawlSearch('site:x.com/*/status ("portfolio tracker" OR "wallet analytics" OR "whale alert" OR "onchain monitoring") -giveaway -airdrop', "competitor", { limit: 10, tbs: "qdr:w", hydrate: true }),
+    firecrawlSearch("crypto wallet monitoring OR on-chain wallet analytics OR transaction alert product competitor", "competitor", { limit: 8, tbs: "qdr:m", hydrate: true, sources: ["news", "web"] }),
+    firecrawlSearch(`crypto wallet monitoring transaction alert product news ${date}`, "news", { limit: 8, tbs: "qdr:w", hydrate: true, sources: ["news", "web"] }),
+    firecrawlSearch("site:wallettracker.app Wallet Tracker", "product", { limit: 6, hydrate: true }),
+    ...(focus.trim().length >= 8 ? [
+      firecrawlSearch(`${focus.trim()} Wallet Tracker crypto wallet`, "news", { limit: 8, tbs: "qdr:m", hydrate: true, sources: ["news", "web"] }),
+      firecrawlSearch(`site:x.com/*/status ${focus.trim()} -giveaway -airdrop`, "x", { limit: 8, tbs: "qdr:m", hydrate: true }),
+    ] : []),
+  ];
+  const settled = await Promise.allSettled(queries);
+  const seen = new Set<string>();
+  const sources = [VERIFIED_PROJECT_SOURCE, ...account.sources, ...settled.flatMap((item) => item.status === "fulfilled" ? item.value : [])]
+    .map((source) => source.channel === "x" || source.channel === "account"
+      ? { ...source, url: preferCanonicalStatusUrl(source.url, source.description) || source.url }
+      : source)
+    .filter((source) => {
+      const key = normalizeUrl(source.url) || source.url;
+      if (seen.has(key) || source.description.length < 35) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 42);
+  if (sources.length < 4) throw new Error("منابع زنده کافی برای ساخت برنامه قابل اعتماد پیدا نشد.");
+  return { sources, accountState: account.state };
+}
+
+function sourceContext(sources: LiveSource[]) {
+  return sources.map((source, index) => `${index + 1}. [${source.channel}] ${source.title}\nURL: ${source.url}\n${source.description}`).join("\n\n");
+}
+
 function evidenceBoundPlan(
-  generated: Omit<DailyManagerPlan, "date" | "generatedAt" | "mode" | "sources">,
+  generated: Omit<DailyManagerPlan, "date" | "generatedAt" | "mode" | "sources" | "accountState" | "contextRevision" | "contextGeneratedAt">,
   sources: LiveSource[],
 ) {
   const allowed = new Map(sources.map((source) => [normalizeUrl(source.url), source]));
@@ -206,8 +197,9 @@ function evidenceBoundPlan(
     const evidence = source?.description.toLocaleLowerCase() || "";
     const unsafeTarget = /(giveaway|airdrop|referral|seed phrase|private key|guaranteed profit|free token|wallet drainer)/i.test(evidence);
     const genericComment = /^(great|nice|amazing|love this|thanks for sharing|interesting)[!. ]*$/i.test(interaction.comment.trim());
-    if (!postUrl || source?.channel !== "x" || unsafeTarget || genericComment || !/^https:\/\/(?:www\.)?x\.com\/[^/]+\/status\/\d+/.test(postUrl)) return [];
-    return [{ ...interaction, postUrl }];
+    const account = interaction.account.startsWith("@") ? interaction.account : `@${interaction.account.replace(/^@/, "")}`;
+    if (!postUrl || (source?.channel !== "x" && source?.channel !== "competitor") || unsafeTarget || genericComment || !/^https:\/\/(?:www\.)?x\.com\/[^/]+\/status\/\d+/.test(postUrl)) return [];
+    return [{ ...interaction, account, postUrl }];
   });
   const signals = generated.signals.flatMap((signal) => {
     const sourceUrl = keepEvidenceUrl(signal.sourceUrl);
@@ -222,28 +214,16 @@ function evidenceBoundPlan(
   return { ...generated, posts, interactions, signals, tasks };
 }
 
-export async function buildDailyPlan(date: string, sources: LiveSource[], focus = ""): Promise<DailyManagerPlan> {
-  const apiKey = process.env.XAI_API_KEY?.trim();
-  if (!apiKey) throw new Error("کلید xAI روی سرور تنظیم نشده است.");
-  const response = await fetch("https://api.x.ai/v1/chat/completions", {
-    method: "POST",
-    headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
-    body: JSON.stringify({
-      model: process.env.XAI_TEXT_MODEL?.trim() || "grok-4.3",
-      temperature: 0.25,
-      messages: [
-        { role: "system", content: `You are the full-service X brand manager for Wallet Tracker. The complete [project] source is the binding project-truth document and includes an explicit confidence table, network truth table, safety rules, content policy, and interaction policy. Follow it exactly. Produce a safe, evidence-based daily operating plan for a non-expert human operator. All operator instructions and explanations must be Persian. Public posts and comments should normally be natural English unless the target post is another language. Never invent product capabilities, metrics, partnerships, transactions, networks, availability, news, customer stories, or release dates. Treat [project] as audited first-party facts and all other sources as live public context. Every factual post must cite only supplied source URLs. Keep each X post at most 260 characters. Do not recommend mass following, repetitive comments, engagement bait, financial advice, automated posting, or any X API discovery request. Customer-facing posts must lead with user value and clear outcomes; never mention frameworks, repositories, backend architecture, internal providers or implementation details unless the requested topic is explicitly technical. If the [account] sources show no posts, or no account post is discoverable, this is bootstrap mode: create one truthful introductory post from verified [project] facts instead of pausing merely because external mentions are absent. Pause only when even first-party evidence is insufficient or a real safety risk exists. Schedule 1-2 quality posts maximum and 2-4 meaningful interactions. An interaction is valid only when it points to an exact supplied X status URL and adds a concrete insight or useful question before any product mention. Never exploit a security incident for promotion. Every image prompt must be 16:9, premium black/orange Wallet Tracker visual, directly related to the exact post, no logos of other companies and no tiny text.` },
-        { role: "user", content: `Date: ${date}\nRequested editorial focus: ${focus.trim() || "none; choose from evidence"}\n\nLive sources collected by Firecrawl:\n${sourceContext(sources)}` },
-      ],
-      response_format: { type: "json_schema", json_schema: { name: "wallet_tracker_daily_plan", strict: true, schema: managerSchema } },
-    }),
-    signal: AbortSignal.timeout(80_000),
+export async function buildDailyPlan(date: string, sources: LiveSource[], accountState: AccountState, focus = ""): Promise<DailyManagerPlan> {
+  const recentPosts = accountState.recentPosts.map((post, index) => `${index + 1}. ${post.postedAt || "unknown time"} · ${post.url}\n${post.text}`).join("\n\n") || "none discoverable";
+  const raw = await xaiChatCompletion({
+    system: `You are the full-service X brand manager for Wallet Tracker. The complete [project] source is the binding project-truth document and includes an explicit confidence table, network truth table, safety rules, content policy, and interaction policy. Follow it exactly. Produce a safe, evidence-based daily operating plan for a non-expert human operator. All operator instructions and explanations must be Persian. Public posts and comments should normally be natural English unless the target post is another language. Never invent product capabilities, metrics, partnerships, transactions, networks, availability, news, customer stories, or release dates. Treat [project] as audited first-party facts and all other sources as live public context. Every factual post must cite only supplied source URLs. Keep each X post at most 260 characters. Do not recommend mass following, repetitive comments, engagement bait, financial advice, automated posting, or any X API discovery request. Customer-facing posts must lead with user value and clear outcomes; never mention frameworks, repositories, backend architecture, internal providers or implementation details unless the requested topic is explicitly technical. Use the live own-account state to decide cadence: bootstrap = one truthful intro post; early = light educational posts that do not repeat the exact previous post text; active = continue themes without duplicating recent posts. Pause only when even first-party evidence is insufficient or a real safety risk exists. Schedule 1-2 quality posts maximum and 2-4 meaningful interactions. An interaction is valid only when it points to an exact supplied X status URL (https://x.com/{handle}/status/{id}) and adds a concrete insight or useful question before any product mention. The account field must be the real @handle from that URL. Never exploit a security incident for promotion. Every image prompt must be 16:9, premium black/orange Wallet Tracker visual, directly related to the exact post, no logos of other companies and no tiny text.`,
+    user: `Date: ${date}\nRequested editorial focus: ${focus.trim() || "none; choose from evidence"}\n\nOwn X account state:\nhandle: ${accountState.handle}\nstage: ${accountState.stage}\nsummary: ${accountState.summaryFa}\nrecent public posts:\n${recentPosts}\n\nLive sources collected by Firecrawl:\n${sourceContext(sources)}`,
+    schemaName: "wallet_tracker_daily_plan",
+    schema: managerSchema,
+    timeoutMs: 120_000,
   });
-  const payload = (await response.json().catch(() => ({}))) as ChatPayload;
-  if (!response.ok) throw new Error(payload.error?.message || `xAI error (${response.status})`);
-  const raw = payload.choices?.[0]?.message?.content;
-  if (!raw) throw new Error("xAI برنامه ساختاریافته‌ای برنگرداند.");
-  const generated = JSON.parse(raw) as Omit<DailyManagerPlan, "date" | "generatedAt" | "mode" | "sources">;
+  const generated = JSON.parse(raw) as Omit<DailyManagerPlan, "date" | "generatedAt" | "mode" | "sources" | "accountState" | "contextRevision" | "contextGeneratedAt">;
   const verified = evidenceBoundPlan(generated, sources);
   return {
     ...verified,
@@ -252,6 +232,7 @@ export async function buildDailyPlan(date: string, sources: LiveSource[], focus 
     contextRevision: PROJECT_CONTEXT_REVISION,
     contextGeneratedAt: PROJECT_CONTEXT_GENERATED_AT,
     mode: "live",
+    accountState,
     sources,
   };
 }
@@ -261,7 +242,7 @@ export async function notifyDailyPlan(request: Request, plan: DailyManagerPlan) 
   const chatId = process.env.TELEGRAM_CHAT_ID?.trim();
   if (!token || !chatId) return false;
   const dashboardBase = process.env.NEXT_PUBLIC_DASHBOARD_URL?.trim() || new URL(request.url).origin;
-  const message = `🧭 برنامه هوشمند امروز آماده شد\n\n${plan.headline}\nهدف امروز: ${plan.todayGoal}\nکارها: ${plan.tasks.length}\nپست‌ها: ${plan.posts.length}\nتعامل‌های پیشنهادی: ${plan.interactions.length}`;
+  const message = `🧭 برنامه هوشمند امروز آماده شد\n\n${plan.headline}\nوضعیت اکانت: ${plan.accountState.stage}\nهدف امروز: ${plan.todayGoal}\nکارها: ${plan.tasks.length}\nپست‌ها: ${plan.posts.length}\nتعامل‌های پیشنهادی: ${plan.interactions.length}`;
   const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
     headers: { "content-type": "application/json" },

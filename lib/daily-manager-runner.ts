@@ -15,10 +15,12 @@ export async function runDailyManager(request: Request, force = false, focus = "
   const date = tehranDate();
   if (!force) {
     const cached = await readDailyPlan(date);
-    if (cached?.contextRevision === PROJECT_CONTEXT_REVISION) return { plan: cached, cached: true, telegramNotified: false };
+    if (cached?.contextRevision === PROJECT_CONTEXT_REVISION && cached.accountState) {
+      return { plan: cached, cached: true, telegramNotified: false };
+    }
   }
-  const sources = await collectLiveSources(date, focus);
-  const plan = await buildDailyPlan(date, sources, focus);
+  const { sources, accountState } = await collectLiveSources(date, focus);
+  const plan = await buildDailyPlan(date, sources, accountState, focus);
   await writeDailyPlan(plan);
   const telegramNotified = await notifyDailyPlan(request, plan).catch(() => false);
   return { plan, cached: false, telegramNotified };

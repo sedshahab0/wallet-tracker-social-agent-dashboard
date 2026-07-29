@@ -227,8 +227,11 @@ test("opens generated content images in an accessible lightbox", async () => {
 });
 
 test("builds an evidence-bound daily manager with Firecrawl and xAI", async () => {
-  const [manager, planRoute, cronRoute, imageRoute, proxyRoute, projectKnowledge, generatedContext, page, exampleEnv, timer] = await Promise.all([
+  const [manager, firecrawl, xai, accountState, planRoute, cronRoute, imageRoute, proxyRoute, projectKnowledge, generatedContext, page, exampleEnv, timer] = await Promise.all([
     readFile(new URL("../lib/social-manager.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/firecrawl.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/xai.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/account-state.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/manager/daily-plan/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/manager/run/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/manager/image/route.ts", import.meta.url), "utf8"),
@@ -239,23 +242,28 @@ test("builds an evidence-bound daily manager with Firecrawl and xAI", async () =
     readFile(new URL("../.env.example", import.meta.url), "utf8"),
     readFile(new URL("../deploy/wallet-social-manager.timer", import.meta.url), "utf8"),
   ]);
-  assert.match(manager, /api\.firecrawl\.dev\/v2/);
+  assert.match(firecrawl, /api\.firecrawl\.dev\/v2/);
   assert.match(manager, /firecrawlScrape/);
+  assert.match(manager, /collectOwnAccountState|accountState/);
   assert.match(manager, /scrapeOptions/);
   assert.match(manager, /tbs: "qdr:w"/);
   assert.match(manager, /VERIFIED_PROJECT_SOURCE/);
   assert.match(manager, /site:x\.com/);
   assert.match(manager, /Promise\.allSettled/);
-  assert.match(manager, /FIRECRAWL_PROXY_URL/);
-  assert.match(manager, /x-research-proxy-key/);
+  assert.match(firecrawl, /FIRECRAWL_PROXY_URL/);
+  assert.match(firecrawl, /x-research-proxy-key/);
   assert.doesNotMatch(manager, /xGet|resolveXAccount|api\.x\.com/);
+  assert.match(accountState, /bootstrap|early|active/);
   assert.match(proxyRoute, /operation === "scrape"/);
   assert.match(proxyRoute, /scrapeOptions/);
   assert.match(projectKnowledge, /PROJECT_CONTEXT_MARKDOWN/);
   assert.match(generatedContext, /Transaction alerts/);
   assert.match(generatedContext, /Never ask for or accept a seed phrase/);
-  assert.match(manager, /api\.x\.ai\/v1\/chat\/completions/);
-  assert.match(manager, /json_schema/);
+  assert.match(xai, /api\.x\.ai\/v1\/chat\/completions/);
+  assert.match(xai, /grok-4\.5/);
+  assert.match(xai, /reasoning_effort/);
+  assert.match(xai, /medium/);
+  assert.match(manager, /json_schema|xaiChatCompletion/);
   assert.match(manager, /evidenceBoundPlan/);
   assert.match(manager, /allowedUrls\.has/);
   assert.match(planRoute, /hasDashboardSession/);
@@ -265,25 +273,30 @@ test("builds an evidence-bound daily manager with Firecrawl and xAI", async () =
   assert.match(imageRoute, /grok-imagine-image/);
   assert.match(imageRoute, /data:\$\{mimeType\};base64/);
   assert.match(page, /مدیر هوشمند روزانه · داده زنده/);
-  assert.match(page, /Firecrawl در حال بررسی X/);
+  assert.match(page, /Firecrawl در حال بررسی X|وضعیت زنده اکانت رسمی/);
   assert.match(page, /\/api\/manager\/image/);
+  assert.match(page, /\/api\/x\/verify/);
   assert.match(exampleEnv, /XAI_API_KEY=\n/);
+  assert.match(exampleEnv, /XAI_TEXT_MODEL=grok-4\.5/);
+  assert.match(exampleEnv, /XAI_REASONING_EFFORT=medium/);
   assert.match(exampleEnv, /SOCIAL_MANAGER_CRON_SECRET=\n/);
   assert.match(timer, /06:15:00 Asia\/Tehran/);
-  assert.doesNotMatch(`${manager}\n${imageRoute}\n${exampleEnv}`, /xai-[A-Za-z0-9_-]{20,}/);
+  assert.doesNotMatch(`${manager}\n${xai}\n${imageRoute}\n${exampleEnv}`, /xai-[A-Za-z0-9_-]{20,}/);
 });
 
-test("polls owned X mentions on the server and keeps the reply UI unchanged", async () => {
-  const [pollRoute, inboxRoute, inbox, page, timer] = await Promise.all([
+test("polls owned X mentions and resolves real Twitter handles via Firecrawl", async () => {
+  const [pollRoute, inboxRoute, inbox, page, timer, verifyRoute] = await Promise.all([
     readFile(new URL("../app/api/x/poll/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/x/inbox/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/x-inbox.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard-client.tsx", import.meta.url), "utf8"),
     readFile(new URL("../deploy/wallet-x-poller.timer", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/x/verify/route.ts", import.meta.url), "utf8"),
   ]);
   assert.match(pollRoute, /SOCIAL_MANAGER_CRON_SECRET/);
   assert.match(pollRoute, /timingSafeEqual/);
   assert.doesNotMatch(inbox, /expansions:\s*"author_id"|"user\.fields"/);
+  assert.doesNotMatch(inbox, /کاربر X · \$\{.*author_id/);
   assert.match(inboxRoute, /hasDashboardSession/);
   assert.match(inbox, /xGetOwned/);
   assert.match(inbox, /since_id/);
@@ -291,11 +304,17 @@ test("polls owned X mentions on the server and keeps the reply UI unchanged", as
   assert.match(inbox, /2_500/);
   assert.match(inbox, /4_000/);
   assert.match(inbox, /notifyBudget/);
-  assert.match(inbox, /api\.x\.ai\/v1\/chat\/completions/);
+  assert.match(inbox, /xaiChatCompletion|api\.x\.ai/);
+  assert.match(inbox, /extractHandle/);
+  assert.match(inbox, /tweetUrl/);
   assert.match(inbox, /same language/);
   assert.match(inbox, /applyReplySafety/);
   assert.match(inbox, /sendMessage/);
+  assert.match(verifyRoute, /verifyPublication/);
   assert.match(page, /\/api\/x\/inbox/);
+  assert.match(page, /\/api\/x\/verify/);
+  assert.match(page, /tweetUrl/);
+  assert.match(page, /آیدی توییتر|dir="ltr"/);
   assert.match(page, /120_000/);
   assert.match(timer, /OnUnitActiveSec=2min/);
 });
