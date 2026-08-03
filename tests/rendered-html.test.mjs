@@ -117,12 +117,15 @@ test("runs selective Firecrawl research server-side and announces completion", a
   ]);
   assert.match(route, /api\.firecrawl\.dev\/v2\/search/);
   assert.match(route, /process\.env\.FIRECRAWL_API_KEY/);
+  assert.match(route, /isFirecrawlEnabled/);
   assert.match(route, /sendMessage/);
   assert.match(route, /hasDashboardSession/);
   assert.match(route, /telegramNotified/);
   assert.match(route, /FIRECRAWL_PROXY_URL/);
   assert.match(proxyRoute, /x-research-proxy-key/);
   assert.match(proxyRoute, /RESEARCH_PROXY_SECRET/);
+  assert.match(proxyRoute, /isFirecrawlEnabled/);
+  assert.match(exampleEnv, /FIRECRAWL_ENABLED=false/);
   assert.match(exampleEnv, /FIRECRAWL_API_KEY=\n/);
   assert.doesNotMatch(`${route}\n${proxyRoute}`, /fc-[a-zA-Z0-9_-]+/);
 });
@@ -248,7 +251,11 @@ test("builds an evidence-bound daily manager with Firecrawl and xAI", async () =
     readFile(new URL("../deploy/wallet-social-manager.timer", import.meta.url), "utf8"),
   ]);
   assert.match(firecrawl, /api\.firecrawl\.dev\/v2/);
+  assert.match(firecrawl, /isFirecrawlEnabled/);
+  assert.match(firecrawl, /FIRECRAWL_ENABLED/);
+  assert.match(firecrawl, /FirecrawlDisabledError/);
   assert.match(manager, /firecrawlScrape/);
+  assert.match(manager, /isFirecrawlEnabled/);
   assert.match(manager, /collectOwnAccountState|accountState/);
   assert.match(manager, /scrapeOptions/);
   assert.match(manager, /tbs: "qdr:w"/);
@@ -259,8 +266,10 @@ test("builds an evidence-bound daily manager with Firecrawl and xAI", async () =
   assert.match(firecrawl, /x-research-proxy-key/);
   assert.doesNotMatch(manager, /xGet|resolveXAccount|api\.x\.com/);
   assert.match(accountState, /bootstrap|early|active/);
+  assert.match(accountState, /isFirecrawlEnabled/);
   assert.match(proxyRoute, /operation === "scrape"/);
   assert.match(proxyRoute, /scrapeOptions/);
+  assert.match(proxyRoute, /isFirecrawlEnabled/);
   assert.match(projectKnowledge, /PROJECT_CONTEXT_MARKDOWN/);
   assert.match(generatedContext, /Transaction alerts/);
   assert.match(generatedContext, /Never ask for or accept a seed phrase/);
@@ -282,6 +291,7 @@ test("builds an evidence-bound daily manager with Firecrawl and xAI", async () =
   assert.match(page, /\/api\/manager\/image/);
   assert.match(page, /\/api\/x\/verify/);
   assert.match(exampleEnv, /XAI_API_KEY=\n/);
+  assert.match(exampleEnv, /FIRECRAWL_ENABLED=false/);
   assert.match(exampleEnv, /XAI_TEXT_MODEL=grok-4\.5/);
   assert.match(exampleEnv, /XAI_REASONING_EFFORT=medium/);
   assert.match(exampleEnv, /SOCIAL_MANAGER_CRON_SECRET=\n/);

@@ -1,4 +1,5 @@
 import { hasDashboardSession } from "@/lib/auth";
+import { isFirecrawlEnabled } from "@/lib/firecrawl";
 
 type FirecrawlHit = {
   title?: string;
@@ -147,6 +148,10 @@ async function searchFirecrawl(apiKey: string, query: string) {
 export async function POST(request: Request) {
   if (!(await hasDashboardSession())) {
     return json({ ok: false, error: "نشست شما منقضی شده است؛ دوباره وارد داشبورد شوید." }, 401);
+  }
+
+  if (!isFirecrawlEnabled()) {
+    return json({ ok: false, error: "کرال Firecrawl فعلاً در داشبورد خاموش است." }, 503);
   }
 
   const apiKey = process.env.FIRECRAWL_API_KEY?.trim();

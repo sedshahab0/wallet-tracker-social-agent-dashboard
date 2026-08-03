@@ -1,4 +1,4 @@
-import { firecrawlRequest, firecrawlScrapeRaw } from "@/lib/firecrawl";
+import { firecrawlRequest, firecrawlScrapeRaw, isFirecrawlEnabled } from "@/lib/firecrawl";
 import { PRODUCT_PROFILE_URL } from "@/lib/project-knowledge";
 import { xAccountUsername } from "@/lib/x-api";
 import { extractStatusUrls, normalizeComparableText, textLooksPublished } from "@/lib/x-thread";
@@ -37,6 +37,14 @@ export async function verifyPublication(input: PublishVerifyInput): Promise<Publ
   const text = input.text.trim();
   if (text.length < 12) {
     return { verified: false, matchedUrl: "", evidence: "", message: "متن برای راستی‌آزمایی خیلی کوتاه است." };
+  }
+  if (!isFirecrawlEnabled()) {
+    return {
+      verified: false,
+      matchedUrl: "",
+      evidence: "",
+      message: "راستی‌آزمایی Firecrawl خاموش است؛ انتشار را دستی در X بررسی کنید.",
+    };
   }
 
   if (input.kind === "reply") {

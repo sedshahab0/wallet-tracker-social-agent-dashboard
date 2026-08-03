@@ -1,3 +1,5 @@
+import { isFirecrawlEnabled } from "@/lib/firecrawl";
+
 type ProxyRequest = {
   operation?: unknown;
   url?: unknown;
@@ -20,6 +22,10 @@ function safeEqual(left: string, right: string) {
 }
 
 export async function POST(request: Request) {
+  if (!isFirecrawlEnabled()) {
+    return Response.json({ success: false, error: "Firecrawl is disabled" }, { status: 503 });
+  }
+
   const expectedSecret = process.env.RESEARCH_PROXY_SECRET?.trim() || "";
   const suppliedSecret = request.headers.get("x-research-proxy-key") || "";
   if (!expectedSecret || !safeEqual(suppliedSecret, expectedSecret)) {

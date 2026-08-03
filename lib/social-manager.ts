@@ -1,5 +1,5 @@
 import { collectOwnAccountState } from "@/lib/account-state";
-import { cleanFirecrawlText, firecrawlRequest, firecrawlScrapeRaw, type FirecrawlHit } from "@/lib/firecrawl";
+import { cleanFirecrawlText, firecrawlRequest, firecrawlScrapeRaw, isFirecrawlEnabled, type FirecrawlHit } from "@/lib/firecrawl";
 import {
   PRODUCT_PROFILE_URL,
   PRODUCT_WEBSITE_URL,
@@ -141,6 +141,27 @@ export async function collectLiveSources(date: string, focus = "") {
     };
     return { state: fallback, sources: [] as LiveSource[] };
   });
+
+  // Firecrawl is fully off: plan only from first-party project truth + offline account note.
+  if (!isFirecrawlEnabled()) {
+    const sources = [
+      VERIFIED_PROJECT_SOURCE,
+      ...account.sources,
+      {
+        title: "وب‌سایت محصول Wallet Tracker",
+        url: PRODUCT_WEBSITE_URL,
+        channel: "product" as const,
+        description: "کرال Firecrawl خاموش است؛ فقط دانش تأییدشده پروژه و آدرس رسمی محصول برای تصمیم‌گیری استفاده می‌شود.",
+      },
+      {
+        title: "پروفایل رسمی X",
+        url: PRODUCT_PROFILE_URL,
+        channel: "product" as const,
+        description: "کرال زنده X غیرفعال است؛ از خواندن تایم‌لاین، اخبار و رقبا با Firecrawl صرف‌نظر شد.",
+      },
+    ].filter((source) => source.description.length >= 35);
+    return { sources, accountState: account.state };
+  }
 
   const queries = [
     firecrawlScrape(PRODUCT_WEBSITE_URL, "product"),

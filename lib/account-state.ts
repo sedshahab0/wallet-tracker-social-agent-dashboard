@@ -1,4 +1,4 @@
-import { cleanFirecrawlText, firecrawlRequest, firecrawlScrapeRaw } from "@/lib/firecrawl";
+import { cleanFirecrawlText, firecrawlRequest, firecrawlScrapeRaw, isFirecrawlEnabled } from "@/lib/firecrawl";
 import { PRODUCT_PROFILE_URL } from "@/lib/project-knowledge";
 import type { AccountState, LiveSource } from "@/lib/social-manager-types";
 import { xAccountUsername } from "@/lib/x-api";
@@ -8,8 +8,29 @@ import {
   parseOwnRecentPosts,
 } from "@/lib/x-thread";
 
+function offlineAccountState(handle: string): { state: AccountState; sources: LiveSource[] } {
+  const state: AccountState = {
+    handle,
+    stage: "bootstrap",
+    profileUrl: PRODUCT_PROFILE_URL,
+    recentPosts: [],
+    summaryFa: "کرال Firecrawl خاموش است؛ وضعیت زنده اکانت خوانده نشد و تصمیم‌گیری فقط با دانش پروژه انجام می‌شود.",
+    scrapedAt: new Date().toISOString(),
+  };
+  return {
+    state,
+    sources: [{
+      title: `وضعیت آفلاین اکانت ${handle}`,
+      url: PRODUCT_PROFILE_URL,
+      channel: "account",
+      description: `${state.summaryFa}\nstage=bootstrap\nprofile=${PRODUCT_PROFILE_URL}`,
+    }],
+  };
+}
+
 export async function collectOwnAccountState(): Promise<{ state: AccountState; sources: LiveSource[] }> {
   const handle = `@${xAccountUsername()}`;
+  if (!isFirecrawlEnabled()) return offlineAccountState(handle);
   const profile = await firecrawlScrapeRaw(PRODUCT_PROFILE_URL, { waitFor: 2000, maxAge: 300_000 });
   const markdown = profile.data?.markdown || "";
   const links = profile.data?.links || [];

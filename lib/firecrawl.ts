@@ -19,7 +19,28 @@ export type FirecrawlPayload = {
   error?: string;
 };
 
+export class FirecrawlDisabledError extends Error {
+  constructor(message = "Firecrawl موقتاً در داشبورد غیرفعال است.") {
+    super(message);
+    this.name = "FirecrawlDisabledError";
+  }
+}
+
+/**
+ * Hard off-switch for all Firecrawl crawl/search traffic.
+ * Default is disabled. Set FIRECRAWL_ENABLED=true (or 1/yes/on) to re-enable.
+ */
+export function isFirecrawlEnabled() {
+  const flag = process.env.FIRECRAWL_ENABLED?.trim().toLowerCase();
+  return flag === "1" || flag === "true" || flag === "yes" || flag === "on";
+}
+
+export function assertFirecrawlEnabled() {
+  if (!isFirecrawlEnabled()) throw new FirecrawlDisabledError();
+}
+
 export function firecrawlTransport() {
+  assertFirecrawlEnabled();
   const apiKey = process.env.FIRECRAWL_API_KEY?.trim();
   if (!apiKey) throw new Error("کلید Firecrawl تنظیم نشده است.");
   const proxyUrl = process.env.FIRECRAWL_PROXY_URL?.trim();
@@ -36,6 +57,7 @@ export function firecrawlTransport() {
 }
 
 export async function firecrawlRequest(operation: "search" | "scrape", body: Record<string, unknown>) {
+  assertFirecrawlEnabled();
   const transport = firecrawlTransport();
   const endpoint = transport.proxied ? transport.endpoint : `${transport.endpoint}/${operation}`;
   const response = await fetch(endpoint, {
@@ -52,6 +74,7 @@ export async function firecrawlRequest(operation: "search" | "scrape", body: Rec
 }
 
 export async function firecrawlScrapeRaw(url: string, options: { waitFor?: number; maxAge?: number; timeout?: number } = {}) {
+  assertFirecrawlEnabled();
   return firecrawlRequest("scrape", {
     url,
     formats: ["markdown", "links"],
